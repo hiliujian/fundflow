@@ -1,0 +1,1946 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FundFlow - 智能基金监控系统</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/echarts/5.4.3/echarts.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root { --primary: #3b82f6; --primary-dark: #2563eb; --primary-light: #60a5fa; --primary-ultra-light: #dbeafe; --success: #ef4444; --danger: #10b981; --warning: #f59e0b; --purple: #8b5cf6; --purple-dark: #7c3aed; --gray-50: #fafafa; --gray-100: #f5f5f5; --gray-200: #e5e5e5; --gray-300: #d4d4d4; --gray-400: #a3a3a3; --gray-500: #737373; --gray-600: #525252; --gray-700: #404040; --gray-800: #262626; --gray-900: #171717; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #f0fdf4 100%); color: var(--gray-900); overflow-x: hidden; }
+        .app-container { display: flex; height: 100vh; position: relative; }
+        
+        /* 移动端菜单按钮 */
+        .mobile-menu-btn { display: none; position: fixed; top: 20px; left: 20px; z-index: 1001; width: 48px; height: 48px; background: white; border: 2px solid var(--gray-200); border-radius: 12px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.1); flex-direction: column; align-items: center; justify-content: center; gap: 4px; }
+        .mobile-menu-btn span { width: 24px; height: 3px; background: var(--gray-700); border-radius: 2px; transition: all 0.3s; }
+        .mobile-menu-btn.active span:nth-child(1) { transform: rotate(45deg) translate(6px, 6px); }
+        .mobile-menu-btn.active span:nth-child(2) { opacity: 0; }
+        .mobile-menu-btn.active span:nth-child(3) { transform: rotate(-45deg) translate(6px, -6px); }
+        
+        .sidebar { width: 420px; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(20px); border-right: 1px solid rgba(229, 229, 229, 0.6); display: flex; flex-direction: column; overflow: hidden; box-shadow: 4px 0 20px rgba(0, 0, 0, 0.03); transition: transform 0.3s; }
+        .sidebar-header { padding: 20px 24px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(229, 229, 229, 0.6); }
+        .logo-card { background: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 50%, #ec4899 100%); border-radius: 16px; padding: 14px 20px; color: white; box-shadow: 0 8px 20px rgba(59, 130, 246, 0.3), 0 2px 8px rgba(139, 92, 246, 0.2); position: relative; overflow: hidden; }
+        .logo-card::before { content: ''; position: absolute; top: -50%; right: -30px; width: 140px; height: 200%; background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0) 100%); transform: rotate(20deg); animation: shimmer 3s infinite; }
+        @keyframes shimmer { 0% { transform: translateX(-100%) rotate(20deg); } 100% { transform: translateX(300%) rotate(20deg); } }
+        .logo-content { position: relative; z-index: 1; }
+        .logo-icon { width: 32px; height: 32px; background: rgba(255, 255, 255, 0.25); border: 2px solid rgba(255, 255, 255, 0.3); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.125rem; margin-bottom: 6px; backdrop-filter: blur(10px); }
+        .logo { font-size: 1.125rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 4px; }
+        .logo-subtitle { font-size: 0.75rem; opacity: 0.95; font-weight: 500; display: flex; align-items: center; gap: 8px; }
+        .status-indicator { width: 7px; height: 7px; background: #10b981; border-radius: 50%; animation: pulse 2s infinite; box-shadow: 0 0 10px #10b981; }
+        @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.7; transform: scale(1.15); } }
+        
+        /* 市场指数 */
+        .market-indices { padding: 0; background: transparent; border: none; }
+        .indices-toggle { width: 100%; padding: 16px 24px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: none; border-bottom: 1px solid rgba(229, 229, 229, 0.6); cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: all 0.3s; }
+        .indices-toggle:hover { background: rgba(249, 250, 251, 0.95); }
+        .indices-toggle-left { display: flex; align-items: center; gap: 10px; }
+        .indices-title { font-size: 0.8125rem; font-weight: 700; color: var(--gray-700); text-transform: uppercase; letter-spacing: 0.08em; display: flex; align-items: center; gap: 8px; margin: 0; }
+        .indices-arrow { font-size: 0.875rem; color: var(--gray-500); transition: transform 0.3s; }
+        .indices-arrow.open { transform: rotate(180deg); }
+        .indices-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(229, 229, 229, 0.6); }
+        .indices-content.open { max-height: 2000px; }
+        .indices-inner { padding: 16px 20px; }
+        
+        /* 修复：强制3列布局 */
+        .indices-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; } 
+        
+        .index-card { background: linear-gradient(135deg, rgba(255,255,255,0.9) 0%, rgba(249,250,251,0.9) 100%); border: 1.5px solid var(--gray-200); border-radius: 12px; padding: 12px 10px; transition: all 0.3s; cursor: pointer; display: flex; flex-direction: column; justify-content: space-between; min-height: 80px; }
+        .index-card:hover { border-color: var(--primary-light); transform: translateY(-2px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.12); }
+        .index-card.positive { background: linear-gradient(135deg, rgba(254, 242, 242, 0.9) 0%, rgba(255, 255, 255, 0.9) 100%); border-color: rgba(239, 68, 68, 0.3); }
+        .index-card.negative { background: linear-gradient(135deg, rgba(236, 253, 245, 0.9) 0%, rgba(255, 255, 255, 0.9) 100%); border-color: rgba(16, 185, 129, 0.3); }
+        .index-card.selected { border-color: var(--primary); box-shadow: 0 4px 16px rgba(59, 130, 246, 0.2); grid-column: span 3; } /* 选中时占满一行 */
+        
+        .index-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px; }
+        .index-name { font-size: 0.75rem; font-weight: 700; color: var(--gray-800); display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+        .index-status-badge { font-size: 0.6rem; padding: 1px 4px; border-radius: 4px; background: var(--gray-100); color: var(--gray-500); font-weight: normal; margin-left: auto; display: none;}
+        .index-card.closed .index-status-badge { display: inline-block; }
+        .index-flag { font-size: 0.875rem; }
+        
+        .index-body { display: flex; flex-direction: column; align-items: flex-start; }
+        .index-value { font-size: 1rem; font-weight: 800; font-family: 'JetBrains Mono', monospace; color: var(--gray-900); line-height: 1.2; margin-bottom: 2px; }
+        .index-change { font-size: 0.75rem; font-weight: 700; display: flex; align-items: center; gap: 2px; }
+        .index-card.positive .index-change { color: #dc2626; }
+        .index-card.negative .index-change { color: #059669; }
+        
+        .index-chart-container { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--gray-200); width: 100%; height: 180px; }
+        .index-mini-chart { width: 100%; height: 100%; }
+        .indices-refresh { margin-top: 12px; width: 100%; padding: 8px; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 8px; font-size: 0.75rem; color: var(--gray-600); cursor: pointer; transition: all 0.2s; font-weight: 600; }
+        .indices-refresh:hover { background: var(--gray-100); border-color: var(--gray-300); }
+        
+        .add-fund-section { padding: 24px; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(229, 229, 229, 0.6); }
+        .section-title { font-size: 0.8125rem; font-weight: 700; color: var(--gray-700); margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.08em; }
+        .input-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; margin-bottom: 10px; }
+        .input-field { width: 100%; padding: 12px 16px; border: 2px solid var(--gray-200); border-radius: 12px; font-size: 0.9375rem; font-family: 'JetBrains Mono', monospace; transition: all 0.25s; background: white; }
+        .input-field:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.12); transform: translateY(-1px); }
+        .btn-add { padding: 12px 24px; border: none; border-radius: 12px; font-size: 0.9375rem; font-weight: 700; cursor: pointer; transition: all 0.25s; background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%); color: white; white-space: nowrap; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); position: relative; overflow: hidden; }
+        .btn-add:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4); }
+        .optional-inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+        .input-small { padding: 10px 14px; font-size: 0.875rem; }
+        .helper-text { font-size: 0.75rem; color: var(--gray-500); margin-top: 10px; display: flex; align-items: center; gap: 6px; background: var(--gray-50); padding: 8px 12px; border-radius: 8px; border-left: 3px solid var(--primary-light); }
+        .fund-suggest { margin-top: 8px; border: 1.5px solid var(--gray-200); border-radius: 12px; background: white; overflow: hidden; box-shadow: 0 8px 20px rgba(0,0,0,0.06); max-height: 260px; overflow-y: auto; display: none; }
+        .fund-suggest-item { padding: 10px 12px; cursor: pointer; transition: background 0.15s; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+        .fund-suggest-item:hover, .fund-suggest-item.active { background: var(--gray-50); }
+        .fund-suggest-left { min-width: 0; }
+        .fund-suggest-name { font-size: 0.875rem; font-weight: 700; color: var(--gray-800); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .fund-suggest-meta { font-size: 0.75rem; color: var(--gray-500); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .fund-suggest-code { font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem; font-weight: 800; color: var(--gray-700); background: var(--gray-100); padding: 4px 8px; border-radius: 8px; flex-shrink: 0; }
+        .fund-list { flex: 1; overflow-y: auto; padding: 16px; }
+        .fund-list::-webkit-scrollbar { width: 6px; }
+        .fund-list::-webkit-scrollbar-thumb { background: var(--gray-300); border-radius: 10px; }
+        .fund-item { background: white; border: 2px solid transparent; border-radius: 16px; padding: 18px; margin-bottom: 14px; cursor: pointer; transition: all 0.3s; position: relative; overflow: hidden; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04); }
+        .fund-item:hover { border-color: var(--primary-light); transform: translateX(6px) translateY(-2px); box-shadow: 0 8px 24px rgba(59, 130, 246, 0.15); }
+        .fund-item.active { background: linear-gradient(135deg, rgba(59, 130, 246, 0.08) 0%, rgba(139, 92, 246, 0.08) 100%); border-color: var(--primary); transform: translateX(8px); }
+        .fund-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px; }
+        .fund-info { flex: 1; }
+        .fund-name { font-size: 0.9375rem; font-weight: 700; color: var(--gray-900); margin-bottom: 6px; }
+        .fund-code { font-size: 0.75rem; color: var(--gray-500); font-family: 'JetBrains Mono', monospace; background: var(--gray-100); padding: 3px 8px; border-radius: 6px; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+        .fund-code-chg { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 0.6875rem; padding: 1px 5px; border-radius: 4px; white-space: nowrap; }
+        .fund-code-chg.positive { background: #fef2f2; color: #dc2626; }
+        .fund-code-chg.negative { background: #ecfdf5; color: #059669; }
+        .fund-code-chg.neutral { background: var(--gray-100); color: var(--gray-500); }
+        .fund-item.card-expanded .fund-code-chg { display: none; }
+        .fund-item.card-collapsed .fund-code-chg { display: inline-block; }
+        .fund-actions { display: flex; gap: 6px; }
+        .btn-icon { width: 32px; height: 32px; border: none; background: var(--gray-100); border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+        .btn-icon:hover { background: var(--gray-200); transform: scale(1.1); }
+        .fund-metrics { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 12px; }
+        .metric-card { background: linear-gradient(135deg, var(--gray-50) 0%, white 100%); padding: 12px; border-radius: 12px; border: 1px solid var(--gray-200); }
+        .metric-label { font-size: 0.6875rem; color: var(--gray-600); margin-bottom: 4px; text-transform: uppercase; font-weight: 600; display: flex; justify-content: space-between; }
+        .metric-value { font-size: 1.125rem; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
+        .positive { color: var(--success); }
+        .negative { color: var(--danger); }
+        /* 基金卡片折叠 */
+        .fund-body { max-height: 200px; overflow: hidden; transition: max-height 0.35s cubic-bezier(.4,0,.2,1); }
+        .fund-body.collapsed { max-height: 0; }
+        .fund-header { cursor: pointer; user-select: none; }
+        .fund-collapse-arrow { font-size: 0.7rem; color: var(--gray-400); transition: transform 0.3s; margin-left: 4px; display: inline-block; }
+        .fund-collapse-arrow.collapsed { transform: rotate(-90deg); }
+        
+        /* 主页标题栏折叠 */
+        .header-collapse-btn { background: none; border: 1.5px solid var(--gray-200); border-radius: 8px; width: 32px; height: 32px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--gray-500); font-size: 0.875rem; transition: all 0.2s; }
+        .header-collapse-btn:hover { border-color: var(--primary-light); color: var(--primary); background: var(--primary-ultra-light); }
+        .stats-grid-wrapper { max-height: 520px; overflow: hidden; transition: max-height 0.35s cubic-bezier(.4,0,.2,1), margin 0.35s; padding: 6px 0; }
+        .stats-grid-wrapper.collapsed { max-height: 0; margin-top: 0 !important; padding: 0; }
+        .stats-grid-wrapper { margin-top: 16px; }
+        
+        /* 日涨跌估算标记 */
+        .day-growth-source { font-size: 0.6875rem; font-weight: 600; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
+        .day-growth-source.est { background: rgba(139,92,246,0.1); color: #7c3aed; }
+        .day-growth-source.official { background: var(--gray-100); color: var(--gray-500); }
+        
+        /* 添加基金区域折叠 */
+        .add-fund-toggle { width: 100%; padding: 14px 24px; background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border: none; border-bottom: 1px solid rgba(229,229,229,0.6); cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: background 0.2s; }
+        .add-fund-toggle:hover { background: rgba(249,250,251,0.98); }
+        .add-fund-toggle-left { display: flex; align-items: center; gap: 10px; }
+        .add-fund-toggle-title { font-size: 0.8125rem; font-weight: 700; color: var(--gray-700); text-transform: uppercase; letter-spacing: 0.08em; }
+        .add-fund-arrow { font-size: 0.75rem; color: var(--gray-500); transition: transform 0.3s; }
+        .add-fund-arrow.open { transform: rotate(180deg); }
+        .add-fund-body { max-height: 0; overflow: hidden; transition: max-height 0.35s cubic-bezier(.4,0,.2,1); background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border-bottom: 1px solid rgba(229,229,229,0.6); }
+        .add-fund-body.open { max-height: 300px; }
+        .add-fund-inner { padding: 16px 24px 20px; }
+
+        /* 持仓编辑对话框 */
+        .pos-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); backdrop-filter: blur(4px); z-index: 20000; display: none; align-items: center; justify-content: center; }
+        .pos-modal-overlay.active { display: flex; }
+        .pos-modal { background: white; border-radius: 20px; width: 360px; max-width: 92vw; box-shadow: 0 24px 60px rgba(0,0,0,0.22); overflow: hidden; animation: posModalIn 0.22s cubic-bezier(.4,0,.2,1); }
+        @keyframes posModalIn { from { transform: translateY(24px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .pos-modal-header { padding: 22px 24px 16px; display: flex; justify-content: space-between; align-items: center; }
+        .pos-modal-title { font-size: 1.0625rem; font-weight: 800; color: var(--gray-900); }
+        .pos-modal-close { width: 28px; height: 28px; border: none; background: var(--gray-100); border-radius: 8px; cursor: pointer; font-size: 1.125rem; color: var(--gray-500); display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+        .pos-modal-close:hover { background: var(--gray-200); color: var(--gray-700); }
+        .pos-modal-body { padding: 0 24px 8px; }
+        .pos-field { margin-bottom: 14px; }
+        .pos-field label { display: block; font-size: 0.75rem; font-weight: 700; color: var(--gray-600); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+        .pos-field input { width: 100%; padding: 10px 14px; border: 2px solid var(--gray-200); border-radius: 10px; font-size: 0.9375rem; font-family: 'JetBrains Mono', monospace; font-weight: 600; transition: border-color 0.2s; background: var(--gray-50); }
+        .pos-field input:focus { outline: none; border-color: var(--primary); background: white; }
+        .pos-field input:disabled { opacity: 0.45; cursor: not-allowed; }
+        .pos-quick-label { font-size: 0.6875rem; font-weight: 700; color: var(--gray-500); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+        .pos-quick-row { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+        .pos-quick-btn { flex: 1; min-width: 0; padding: 7px 4px; border: 1.5px solid var(--gray-200); border-radius: 8px; background: white; font-size: 0.75rem; font-weight: 700; color: var(--gray-700); cursor: pointer; transition: all 0.15s; text-align: center; white-space: nowrap; }
+        .pos-quick-btn:hover { border-color: var(--primary-light); color: var(--primary); background: var(--primary-ultra-light); }
+        .pos-quick-btn.danger { border-color: #fca5a5; color: #dc2626; }
+        .pos-quick-btn.danger:hover { background: #fef2f2; border-color: #ef4444; }
+        .pos-quick-btn.success { border-color: #6ee7b7; color: #059669; }
+        .pos-quick-btn.success:hover { background: #ecfdf5; border-color: #10b981; }
+        .pos-modal-footer { padding: 16px 24px 22px; display: flex; gap: 10px; justify-content: flex-end; }
+        .pos-btn-cancel { padding: 9px 20px; border: 2px solid var(--gray-200); border-radius: 10px; background: white; font-size: 0.875rem; font-weight: 700; color: var(--gray-700); cursor: pointer; transition: all 0.15s; }
+        .pos-btn-cancel:hover { border-color: var(--gray-300); background: var(--gray-50); }
+        .pos-btn-save { padding: 9px 24px; border: none; border-radius: 10px; background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white; font-size: 0.875rem; font-weight: 700; cursor: pointer; transition: all 0.15s; box-shadow: 0 3px 10px rgba(59,130,246,0.3); }
+        .pos-btn-save:hover { transform: translateY(-1px); box-shadow: 0 5px 16px rgba(59,130,246,0.4); }
+        
+        .fund-chart { height: 80px; background: var(--gray-50); border-radius: 10px; overflow: hidden; border: 1px solid var(--gray-200); }
+        .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; background: rgba(255, 255, 255, 0.5); backdrop-filter: blur(10px); }
+        .main-header { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(229, 229, 229, 0.6); padding: 24px 32px; }
+        .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+        .fund-title-main { font-size: 1.75rem; font-weight: 800; color: var(--gray-900); margin-bottom: 8px; }
+        .fund-meta { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+        .fund-code-large { font-family: 'JetBrains Mono', monospace; font-size: 0.875rem; color: var(--gray-600); background: var(--gray-50); padding: 6px 14px; border-radius: 10px; font-weight: 600; border: 1px solid var(--gray-200); }
+        .market-status { display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 10px; font-size: 0.8125rem; font-weight: 600; }
+        .market-status.open { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+        .market-status.closed { background: var(--gray-50); color: var(--gray-700); border: 1px solid var(--gray-200); }
+        .update-time { font-size: 0.8125rem; color: var(--gray-600); background: var(--gray-50); padding: 6px 14px; border-radius: 10px; border: 1px solid var(--gray-200); }
+        .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+        .stat-card { background: white; padding: 20px; border-radius: 16px; border: 2px solid var(--gray-200); transition: all 0.3s; position: relative; overflow: hidden; }
+        .stat-card:hover { border-color: var(--primary-light); transform: translateY(-4px); box-shadow: 0 8px 24px rgba(59, 130, 246, 0.15); }
+        .stat-label { font-size: 0.75rem; color: var(--gray-600); margin-bottom: 8px; text-transform: uppercase; font-weight: 700; display: flex; justify-content: space-between; align-items: center; }
+        .stat-value { font-size: 1.875rem; font-weight: 800; font-family: 'JetBrains Mono', monospace; margin-bottom: 6px; }
+        .stat-change { font-size: 0.875rem; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+        .chart-section { flex: 1; padding: 32px; overflow-y: auto; }
+        .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+        .chart-title { font-size: 1.25rem; font-weight: 800; color: var(--gray-900); }
+        .time-tabs { display: flex; gap: 8px; background: white; padding: 6px; border-radius: 14px; border: 1px solid var(--gray-200); }
+        .time-tab { padding: 8px 18px; border: none; background: transparent; border-radius: 10px; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.2s; color: var(--gray-600); }
+        .time-tab.active { background: var(--primary); color: white; box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3); }
+        .chart-row { display: flex; gap: 24px; height: 480px; margin-bottom: 24px; }
+        .chart-main { flex: 2; min-width: 0; display: flex; flex-direction: column; }
+        .chart-side { flex: 1; min-width: 340px; display: flex; flex-direction: column; }
+        .chart-container { background: white; border-radius: 20px; padding: 24px; height: 100%; display: flex; flex-direction: column; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06); border: 2px solid var(--gray-100); margin-bottom: 0; }
+        #klineChart { width: 100%; flex: 1; min-height: 0; }
+        .side-card { background: white; border-radius: 20px; padding: 24px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06); border: 2px solid var(--gray-100); display: flex; flex-direction: column; height: 100%; min-height: 0; overflow: hidden; }
+        .table-header { font-size: 1.125rem; font-weight: 800; color: var(--gray-900); margin-bottom: 16px; padding-bottom: 16px; border-bottom: 2px solid var(--gray-100); flex-shrink: 0; }
+        .sector-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; flex-shrink: 0; }
+        .sector-tag { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; background: var(--gray-50); border: 1px solid var(--gray-200); color: var(--gray-600); }
+        .sector-tag.top10-weight { background: rgba(59, 130, 246, 0.08); border-color: rgba(59, 130, 246, 0.22); color: var(--primary-dark); }
+        .sector-tag.positive { background: #fef2f2; border-color: #fee2e2; color: #dc2626; }
+        .sector-tag.negative { background: #ecfdf5; border-color: #d1fae5; color: #059669; }
+        .side-scroll { flex: 1; overflow-y: auto; padding-right: 4px; }
+        .side-scroll::-webkit-scrollbar { width: 4px; }
+        .side-scroll::-webkit-scrollbar-thumb { background: var(--gray-300); border-radius: 10px; }
+        table { width: 100%; border-collapse: separate; border-spacing: 0; }
+        .side-scroll thead th { position: sticky; top: 0; background: white; z-index: 10; padding: 10px 8px; text-align: left; font-size: 0.75rem; font-weight: 700; color: var(--gray-500); border-bottom: 1px solid var(--gray-200); }
+        .data-table-container thead th { padding: 10px 8px; text-align: left; font-size: 0.75rem; font-weight: 700; color: var(--gray-500); border-bottom: 1px solid var(--gray-200); }
+        tbody td { padding: 10px 8px; border-bottom: 1px solid var(--gray-50); font-size: 0.875rem; color: var(--gray-800); }
+        .side-scroll tbody tr { cursor: pointer; transition: background 0.15s; }
+        .side-scroll tbody tr:hover { background: var(--gray-50); }
+        .side-scroll tbody tr:hover td:first-child { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
+        .history-scroll { max-height: 360px; overflow-y: auto; }
+        .data-table-container { background: white; border-radius: 20px; padding: 24px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06); border: 2px solid var(--gray-100); }
+        .toast { position: fixed; top: 24px; right: 24px; padding: 16px 24px; border-radius: 14px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15); z-index: 10000; animation: slideIn 0.3s ease-out; background: white; border: 2px solid var(--gray-200); }
+        .toast.success { border-color: #10b981; background: #ecfdf5; }
+        .toast.error { border-color: #ef4444; background: #fef2f2; }
+        @keyframes slideIn { from { transform: translateX(400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .empty-state { text-align: center; padding: 60px 32px; color: var(--gray-500); }
+        .empty-icon { font-size: 4rem; margin-bottom: 16px; opacity: 0.5; }
+        .empty-text { font-size: 1.125rem; font-weight: 600; color: var(--gray-700); margin-bottom: 8px; }
+        .empty-subtext { font-size: 0.9375rem; }
+        
+        /* 数据源状态指示器 */
+        .source-indicator { position: fixed; bottom: 20px; left: 20px; background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); padding: 12px 16px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); border: 1px solid var(--gray-200); font-size: 0.8125rem; z-index: 100; display: flex; align-items: center; gap: 8px; cursor: pointer; transition: all 0.3s; }
+        .source-indicator:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.15); }
+        .source-indicator .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; animation: pulse 2s infinite; }
+        .source-indicator .status-text { font-weight: 600; color: var(--gray-700); }
+        .source-indicator .source-name { font-family: 'JetBrains Mono', monospace; color: var(--gray-500); font-size: 0.75rem; }
+        
+        /* 数据源统计弹窗 */
+        .source-stats-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 10001; display: none; align-items: center; justify-content: center; }
+        .source-stats-modal.active { display: flex; }
+        .source-stats-content { background: white; border-radius: 20px; padding: 32px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        .source-stats-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; padding-bottom: 16px; border-bottom: 2px solid var(--gray-100); }
+        .source-stats-title { font-size: 1.25rem; font-weight: 800; }
+        .source-stats-close { width: 32px; height: 32px; border: none; background: var(--gray-100); border-radius: 8px; cursor: pointer; font-size: 1.25rem; }
+        .source-stats-table { width: 100%; }
+        .source-stats-table th { text-align: left; padding: 10px; background: var(--gray-50); font-size: 0.75rem; font-weight: 700; color: var(--gray-600); }
+        .source-stats-table td { padding: 12px 10px; border-bottom: 1px solid var(--gray-100); font-size: 0.875rem; }
+        .source-stats-table .success-rate { font-weight: 700; }
+        .source-stats-table .success-rate.high { color: #10b981; }
+        .source-stats-table .success-rate.medium { color: #f59e0b; }
+        .source-stats-table .success-rate.low { color: #ef4444; }
+        
+        /* 移动端适配 */
+        @media (max-width: 1200px) { 
+            .chart-row { height: auto; flex-direction: column; } 
+            .chart-container { height: 400px; margin-bottom: 24px; } 
+            .chart-side { min-width: 100%; }
+            .side-card { height: 400px; } 
+            .stats-grid { grid-template-columns: repeat(2, 1fr); } 
+        }
+        
+        @media (max-width: 768px) { 
+            .mobile-menu-btn { display: flex; }
+            .sidebar { 
+                width: 100%; 
+                max-width: 380px;
+                position: fixed; 
+                z-index: 1000; 
+                height: 100vh;
+                transform: translateX(-100%); 
+                transition: transform 0.3s; 
+            }
+            .sidebar.open { transform: translateX(0); }
+            .sidebar-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 999; }
+            .sidebar-overlay.active { display: block; }
+            .main-content { margin-left: 0; }
+            .main-header { padding: 80px 16px 16px; }
+            .fund-title-main { font-size: 1.25rem; }
+            .stats-grid { grid-template-columns: 1fr; gap: 12px; }
+            .stat-card { padding: 16px; }
+            .stat-value { font-size: 1.5rem; }
+            .chart-section { padding: 16px; }
+            .chart-container { padding: 16px; }
+            .side-card { padding: 16px; }
+            .fund-meta { gap: 8px; }
+            .chart-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+            .time-tabs { width: 100%; justify-content: space-between; }
+            .time-tab { padding: 8px 12px; font-size: 0.8125rem; }
+            .input-row { grid-template-columns: 1fr; }
+            .btn-add { width: 100%; }
+            .source-indicator { display: none; } /* 移动端隐藏数据源指示器 */
+            .market-indices { padding: 0; }
+            .indices-toggle { padding: 12px 16px; }
+            .indices-inner { padding: 16px; }
+            /* 移动端恢复1列 */
+            .indices-grid { grid-template-columns: 1fr; gap: 8px; }
+            .index-card { padding: 10px 12px; min-height: auto; }
+            .index-card.selected { grid-column: span 1; }
+            .index-value { font-size: 1rem; }
+        }
+        
+        @media (max-width: 480px) {
+            .optional-inputs { grid-template-columns: 1fr; }
+            .fund-code-large, .market-status, .update-time { font-size: 0.75rem; padding: 4px 10px; }
+        }
+    </style>
+</head>
+<body>
+    <button class="mobile-menu-btn" id="mobileMenuBtn">
+        <span></span>
+        <span></span>
+        <span></span>
+    </button>
+    
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+    
+    <div class="source-indicator" id="sourceIndicator">
+        <div class="status-dot"></div>
+        <div class="status-text">数据源运行中</div>
+        <div class="source-name" id="currentSourceName">fundgz_jsonp</div>
+    </div>
+    
+    <div class="source-stats-modal" id="sourceStatsModal">
+        <div class="source-stats-content">
+            <div class="source-stats-header">
+                <h3 class="source-stats-title">📊 数据源统计</h3>
+                <button class="source-stats-close" onclick="closeSourceStats()">×</button>
+            </div>
+            <table class="source-stats-table">
+                <thead>
+                    <tr>
+                        <th>数据源</th>
+                        <th>成功</th>
+                        <th>失败</th>
+                        <th>成功率</th>
+                        <th>平均耗时</th>
+                    </tr>
+                </thead>
+                <tbody id="sourceStatsTableBody">
+                    <tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--gray-500);">暂无数据</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    
+    <!-- 持仓编辑对话框 -->
+    <div class="pos-modal-overlay" id="posModalOverlay" onclick="posModalBgClick(event)">
+        <div class="pos-modal">
+            <div class="pos-modal-header">
+                <div class="pos-modal-title" id="posModalTitle">编辑持仓</div>
+                <button class="pos-modal-close" onclick="closePosModal()">×</button>
+            </div>
+            <div class="pos-modal-body">
+                <div class="pos-field">
+                    <label>基金代码</label>
+                    <input type="text" id="posCode" disabled>
+                </div>
+                <div class="pos-field">
+                    <label>持仓成本（每份买入价）</label>
+                    <input type="number" id="posCost" placeholder="如 1.5200" step="0.0001">
+                </div>
+                <div class="pos-field">
+                    <label>持仓份额</label>
+                    <input type="number" id="posShares" placeholder="如 10000">
+                </div>
+                <div class="pos-quick-label">快速操作</div>
+                <div class="pos-quick-row">
+                    <button class="pos-quick-btn danger" onclick="posQuickAction('clear')">清仓</button>
+                    <button class="pos-quick-btn" onclick="posQuickAction('half')">1/2</button>
+                    <button class="pos-quick-btn" onclick="posQuickAction('third')">1/3</button>
+                    <button class="pos-quick-btn" onclick="posQuickAction('quarter')">1/4</button>
+                    <button class="pos-quick-btn success" onclick="posQuickAction('double')">2×</button>
+                </div>
+            </div>
+            <div class="pos-modal-footer">
+                <button class="pos-btn-cancel" onclick="closePosModal()">取消</button>
+                <button class="pos-btn-save" onclick="savePosModal()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-card">
+                    <div class="logo-content">
+                        <div class="logo-icon">📈</div>
+                        <div class="logo">FundFlow</div>
+                        <div class="logo-subtitle"><span class="status-indicator"></span><span>实时监控系统</span></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="market-indices">
+                <button class="indices-toggle" onclick="toggleIndices()">
+                    <div class="indices-toggle-left">
+                        <div class="indices-title">
+                            <span>📊</span>
+                            <span>市场指数</span>
+                        </div>
+                    </div>
+                    <span class="indices-arrow" id="indicesArrow">▼</span>
+                </button>
+                
+                <div class="indices-content" id="indicesContent">
+                    <div class="indices-inner">
+                        <div class="indices-grid" id="indicesGrid">
+                            </div>
+                        <button class="indices-refresh" onclick="fetchMarketIndices()">🔄 刷新指数</button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="add-fund-section" style="padding:0; border-bottom:none;">
+                <button class="add-fund-toggle" onclick="toggleAddFund()">
+                    <div class="add-fund-toggle-left">
+                        <span>＋</span>
+                        <span class="add-fund-toggle-title">添加基金</span>
+                    </div>
+                    <span class="add-fund-arrow" id="addFundArrow">▼</span>
+                </button>
+                <div class="add-fund-body" id="addFundBody">
+                    <div class="add-fund-inner">
+                        <div class="input-row">
+                            <input type="text" id="fundCode" class="input-field" placeholder="输入基金代码">
+                            <button onclick="addFund()" class="btn-add">添加</button>
+                        </div>
+                        <div class="fund-suggest" id="fundSuggest"></div>
+                        <div class="optional-inputs">
+                            <input type="number" id="holdingCost" class="input-field input-small" placeholder="持仓成本(可选)">
+                            <input type="number" id="holdingShares" class="input-field input-small" placeholder="持仓份额(可选)">
+                        </div>
+                        <div class="helper-text"><span>💡</span><span>输入持仓信息可查看收益详情</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="fund-list" id="fundList"></div>
+        </aside>
+
+        <main class="main-content">
+            <div class="main-header">
+                <div class="header-top">
+                    <div class="fund-title-section">
+                        <h1 class="fund-title-main" id="selectedFundName">选择一个基金开始监控</h1>
+                        <div class="fund-meta">
+                            <span class="fund-code-large" id="selectedFundCode">--</span>
+                            <div class="market-status closed" id="marketStatus"><span>⏸</span><span id="marketStatusText">休市中</span></div>
+                            <div class="update-time" id="updateTime">--</div>
+                        </div>
+                    </div>
+                    <button class="header-collapse-btn" id="headerCollapseBtn" onclick="toggleHeaderStats()" title="折叠/展开">▼</button>
+                </div>
+                <div class="stats-grid-wrapper" id="statsGridWrapper">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-label">当前净值 <span id="navDateLabel" style="background:var(--gray-100); padding:2px 6px; border-radius:4px; font-weight:500; font-size:0.65rem;">--</span></div>
+                            <div class="stat-value" id="currentNav">--</div>
+                            <div class="stat-change" id="navChange">--</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label"><span id="estLabel">估算净值</span></div>
+                            <div class="stat-value" id="estimatedNav">--</div>
+                            <div class="stat-change" id="estimatedChange">--</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">日涨跌幅</div>
+                            <div class="stat-value" id="dayGrowth">--</div>
+                            <div class="stat-change" id="dayGrowthChange">--<span class="day-growth-source official" id="dayGrowthSource"></span></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">持仓收益</div>
+                            <div class="stat-value" id="totalProfit">--</div>
+                            <div class="stat-change" id="profitPercent">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chart-section">
+                <div class="chart-header">
+                    <h2 class="chart-title" id="chartTypeLabel">净值走势图</h2>
+                    <div class="time-tabs">
+                        <button class="time-tab active" onclick="changeTimeRange('realtime')">实时</button>
+                        <button class="time-tab" onclick="changeTimeRange('5d')">1周</button>
+                        <button class="time-tab" onclick="changeTimeRange('1m')">1月</button>
+                        <button class="time-tab" onclick="changeTimeRange('3m')">3月</button>
+                        <button class="time-tab" onclick="changeTimeRange('1y')">1年</button>
+                        <button class="time-tab" onclick="changeTimeRange('all')">成立来</button>
+                    </div>
+                </div>
+                <div class="chart-row">
+                    <div class="chart-main">
+                        <div class="chart-container"><div id="klineChart"></div></div>
+                    </div>
+                    <div class="chart-side">
+                        <div class="side-card">
+                            <div class="table-header">基金持仓（TOP 10）</div>
+                            <div id="sectorTags" class="sector-tags"><span style="font-size: 0.8125rem; color: var(--gray-500);">暂无数据</span></div>
+                            <div class="side-scroll">
+                                <table>
+                                    <thead><tr><th>股票</th><th>代码</th><th>占比</th><th>涨跌幅</th></tr></thead>
+                                    <tbody id="holdingsTableBody"><tr><td colspan="4" style="text-align: center; color: var(--gray-500); padding: 40px;">请选择基金</td></tr></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="data-table-container">
+                    <div class="table-header">历史净值数据</div>
+                    <div class="history-scroll" id="historyScroll">
+                        <table>
+                            <thead><tr><th>日期</th><th>单位净值</th><th>累计净值</th><th>日增长率</th></tr></thead>
+                            <tbody id="historyTableBody"><tr><td colspan="4" style="text-align: center; color: var(--gray-500); padding: 40px;">暂无数据</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let funds = JSON.parse(localStorage.getItem('funds') || '[]');
+        let selectedFund = null;
+        let holdingsCache = {}; // { [fundCode]: { holdings: [{code, ratio, chg}], top10Weight, top10Contribution, estDayChg, timestamp } }
+        let chart = null;
+        let miniCharts = {};
+        let updateInterval = null;
+        let realtimeInterval = null;
+        let currentTimeRange = 'realtime';
+        let historyCache = {}; // { [fundCode]: [{x, y}, ...] } 缓存 pingzhongdata 全部历史
+        let historyTableState = { code: null, rendered: 0, pageSize: 10 };
+        let fundgzQueue = Promise.resolve();
+        let marketIndices = {};
+        let selectedIndexKey = null;
+        let indexCharts = {};
+
+        // 添加基金区域折叠
+        function toggleAddFund() {
+            const body = document.getElementById('addFundBody');
+            const arrow = document.getElementById('addFundArrow');
+            body.classList.toggle('open');
+            arrow.classList.toggle('open');
+        }
+
+        // ============================================================
+        // 持仓编辑对话框
+        // ============================================================
+        let _posEditCode = null; // 当前正在编辑的基金代码
+
+        function openPosModal(code) {
+            const fund = funds.find(f => f.code === code);
+            if (!fund) return;
+            _posEditCode = code;
+            document.getElementById('posModalTitle').textContent = `编辑持仓 — ${fund.name || code}`;
+            document.getElementById('posCode').value = code;
+            document.getElementById('posCost').value = fund.holdingCost != null ? fund.holdingCost : '';
+            document.getElementById('posShares').value = fund.holdingShares != null ? fund.holdingShares : '';
+            document.getElementById('posModalOverlay').classList.add('active');
+            // 短延迟后 focus 成本输入框
+            setTimeout(() => document.getElementById('posCost').focus(), 120);
+        }
+
+        function closePosModal() {
+            document.getElementById('posModalOverlay').classList.remove('active');
+            _posEditCode = null;
+        }
+
+        function posModalBgClick(e) {
+            if (e.target === document.getElementById('posModalOverlay')) closePosModal();
+        }
+
+        function savePosModal() {
+            if (!_posEditCode) return;
+            const fund = funds.find(f => f.code === _posEditCode);
+            if (!fund) return;
+            const costVal = document.getElementById('posCost').value.trim();
+            const sharesVal = document.getElementById('posShares').value.trim();
+            fund.holdingCost = costVal !== '' ? parseFloat(costVal) : null;
+            fund.holdingShares = sharesVal !== '' ? parseFloat(sharesVal) : null;
+            // 校验 NaN
+            if (fund.holdingCost !== null && isNaN(fund.holdingCost)) fund.holdingCost = null;
+            if (fund.holdingShares !== null && isNaN(fund.holdingShares)) fund.holdingShares = null;
+            saveFunds();
+            closePosModal();
+            renderFundList();
+            if (selectedFund?.code === _posEditCode || selectedFund?.code === fund.code) updateMainDisplay(fund);
+            showToast('持仓信息已更新');
+        }
+
+        function posQuickAction(action) {
+            const sharesInput = document.getElementById('posShares');
+            const current = parseFloat(sharesInput.value) || 0;
+            switch (action) {
+                case 'clear':
+                    sharesInput.value = '0';
+                    break;
+                case 'half':
+                    sharesInput.value = Math.floor(current / 2);
+                    break;
+                case 'third':
+                    sharesInput.value = Math.floor(current / 3);
+                    break;
+                case 'quarter':
+                    sharesInput.value = Math.floor(current / 4);
+                    break;
+                case 'double':
+                    sharesInput.value = current * 2;
+                    break;
+            }
+            sharesInput.dispatchEvent(new Event('input'));
+        }
+
+        // 主页标题栏 stats 折叠/展开
+        function toggleHeaderStats() {
+            const wrapper = document.getElementById('statsGridWrapper');
+            const btn = document.getElementById('headerCollapseBtn');
+            if (!wrapper) return;
+            wrapper.classList.toggle('collapsed');
+            if (btn) btn.textContent = wrapper.classList.contains('collapsed') ? '▲' : '▼';
+        }
+
+        // 折叠/展开市场指数
+        function toggleIndices() {
+            const content = document.getElementById('indicesContent');
+            const arrow = document.getElementById('indicesArrow');
+            content.classList.toggle('open');
+            arrow.classList.toggle('open');
+            if (content.classList.contains('open') && Object.keys(marketIndices).length === 0) {
+                fetchMarketIndices();
+            }
+        }
+
+        // 市场指数配置
+        const MARKET_INDICES = {
+            sh000001: { name: '上证指数', flag: '🇨🇳', secid: '1.000001', type: 'cn' },
+            sz399001: { name: '深证成指', flag: '🇨🇳', secid: '0.399001', type: 'cn' },
+            sz399006: { name: '创业板指', flag: '🇨🇳', secid: '0.399006', type: 'cn' },
+            us_dji: { name: '道琼斯', flag: '🇺🇸', secid: '100.DJIA', type: 'us' },
+            us_ixic: { name: '纳斯达克', flag: '🇺🇸', secid: '100.NDX', type: 'us' },
+            us_spx: { name: '标普500', flag: '🇺🇸', secid: '100.SPX', type: 'us' }
+        };
+
+        async function fetchMarketIndices() {
+            const grid = document.getElementById('indicesGrid');
+            if (!grid) return;
+
+            const indexSources = [
+                {
+                    name: 'eastmoney_api',
+                    fetch: async (secid) => {
+                        const url = `https://push2.eastmoney.com/api/qt/stock/get?secid=${secid}&fields=f43,f3,f169,f170,f60,f86&_=${Date.now()}`;
+                        return await runWithSourceStat('index_stock_get_jsonp', async () => await fetchJsonp(url, 'cb', 12000));
+                    }
+                }
+            ];
+
+            const indexCards = [];
+            
+            for (const [key, config] of Object.entries(MARKET_INDICES)) {
+                let data = null;
+                
+                for (const source of indexSources) {
+                    try {
+                        const result = await Promise.race([
+                            source.fetch(config.secid),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000))
+                        ]);
+                        if (result?.data) { data = result.data; break; }
+                    } catch (error) {
+                        console.warn(`[指数-${config.name}-${source.name}] 失败:`, error.message);
+                        continue;
+                    }
+                }
+
+                if (data) {
+                    const price = data.f43 || data.f60;
+                    const isCn = config.type === 'cn';
+                    let isClosed = false;
+                    if (isCn) {
+                        const s = getMarketStatus();
+                        isClosed = !s.isOpen;
+                    } else {
+                        const today = new Date();
+                        const day = today.getDay();
+                        if (day === 0 || day === 6) isClosed = true;
+                    }
+
+                    let changePct = 0;
+                    // A股在休市时：用最近收盘口径（收盘价 vs 昨收）
+                    if (isCn && isClosed) {
+                        const closeRaw = data.f43;
+                        const preCloseRaw = data.f60;
+                        if (Number.isFinite(closeRaw) && Number.isFinite(preCloseRaw) && preCloseRaw !== 0) {
+                            changePct = (closeRaw - preCloseRaw) / preCloseRaw * 100;
+                        } else if (data.f170 && price) {
+                            const preClose = price - data.f170;
+                            if (preClose) changePct = (data.f170 / preClose) * 100;
+                        } else if (data.f3 !== undefined && data.f3 !== null && data.f3 !== '-') {
+                            changePct = data.f3;
+                        }
+                    } else {
+                        // 交易中（或非A股指数）：优先用接口实时涨跌幅
+                        if (data.f3 !== undefined && data.f3 !== null && data.f3 !== '-') {
+                            changePct = data.f3;
+                        } else if (data.f170 && price) {
+                            const preClose = price - data.f170;
+                            if (preClose) changePct = (data.f170 / preClose) * 100;
+                        }
+                    }
+                    const updateTime = data.f86 || '--';
+                    const isPositive = changePct >= 0;
+                    const finalPrice = price > 10000 && config.type === 'cn' ? (price/100).toFixed(2) : (price/100).toFixed(2);
+                    const formattedChange = (changePct !== undefined) ? (isPositive ? '+' : '') + parseFloat(changePct).toFixed(2) + '%' : '--';
+                    
+                    let timeStr = '--';
+                    if (updateTime && updateTime !== '--') {
+                        const d = new Date(updateTime * 1000);
+                        timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                    }
+                    
+                    marketIndices[key] = { price: finalPrice, change: changePct, changePct: formattedChange, time: timeStr, secid: config.secid, name: config.name };
+                    
+                    indexCards.push(`
+                        <div class="index-card ${isPositive ? 'positive' : 'negative'} ${selectedIndexKey === key ? 'selected' : ''} ${isClosed ? 'closed' : ''}" 
+                             onclick="selectIndex('${key}')" id="indexCard_${key}">
+                            <div class="index-header">
+                                <div class="index-name"><span class="index-flag">${config.flag}</span>${config.name}</div>
+                                <span class="index-status-badge">休市</span>
+                            </div>
+                            <div class="index-body">
+                                <div class="index-value">${finalPrice}</div>
+                                <div class="index-change">${formattedChange}</div>
+                            </div>
+                            <div class="index-chart-container" id="chartContainer_${key}" style="display: none;">
+                                <div class="index-mini-chart" id="indexChart_${key}"></div>
+                            </div>
+                        </div>
+                    `);
+                } else {
+                    indexCards.push(`
+                        <div class="index-card">
+                            <div class="index-header"><div class="index-name"><span class="index-flag">${config.flag}</span>${config.name}</div></div>
+                            <div class="index-body"><div class="index-value">---</div><div class="index-change">加载失败</div></div>
+                        </div>
+                    `);
+                }
+            }
+            grid.innerHTML = indexCards.join('');
+        }
+        
+        async function selectIndex(key) {
+            if (selectedIndexKey) {
+                const prevCard = document.getElementById(`indexCard_${selectedIndexKey}`);
+                const prevContainer = document.getElementById(`chartContainer_${selectedIndexKey}`);
+                if (prevCard) prevCard.classList.remove('selected');
+                if (prevContainer) prevContainer.style.display = 'none';
+            }
+            if (selectedIndexKey === key) { selectedIndexKey = null; return; }
+            
+            selectedIndexKey = key;
+            const card = document.getElementById(`indexCard_${key}`);
+            const container = document.getElementById(`chartContainer_${key}`);
+            
+            if (card) card.classList.add('selected');
+            if (container) {
+                container.style.display = 'block';
+                if (indexCharts[key]) indexCharts[key].dispose();
+                await fetchAndDrawIndexKline(key);
+            }
+        }
+        
+        function parseTrendTime(str) {
+            if (!str) return '';
+            let match = str.match(/(\d{2}):(\d{2})/);
+            if (match) return `${match[1]}:${match[2]}`;
+            if (str.length >= 12 && !isNaN(str)) return str.substring(8, 10) + ':' + str.substring(10, 12);
+            return str;
+        }
+
+        function isAshareTradingTimeLabel(hhmm) {
+            const m = (hhmm || '').match(/^(\d{2}):(\d{2})$/);
+            if (!m) return true;
+            const min = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+            return (min >= 570 && min <= 690) || (min >= 780 && min <= 900);
+        }
+
+        async function fetchAndDrawIndexKline(key) {
+            const config = MARKET_INDICES[key];
+            if (!config) return;
+            const chartDom = document.getElementById(`indexChart_${key}`);
+            if (!chartDom) return;
+            
+            const klineSources = [
+                {
+                    name: 'eastmoney_trend',
+                    fetch: async () => {
+                        const url = `https://push2.eastmoney.com/api/qt/stock/trends2/get?secid=${config.secid}&fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13&fields2=f51,f53&_=${Date.now()}`;
+                        return await runWithSourceStat('index_trends2_jsonp', async () => await fetchJsonp(url, 'cb', 12000));
+                    }
+                }
+            ];
+            
+            let trendData = null;
+            for (const source of klineSources) {
+                try {
+                    const result = await source.fetch();
+                    if (result?.data?.trends) { trendData = result.data; break; }
+                } catch (error) {
+                    console.warn(`[K线-${config.name}-${source.name}] 失败:`, error.message);
+                    continue;
+                }
+            }
+            
+            if (!trendData || !trendData.trends) {
+                chartDom.innerHTML = '<div style="text-align:center;color:var(--gray-500);padding:60px 0;font-size:0.75rem;">暂无数据</div>';
+                return;
+            }
+            
+            const times = [];
+            const prices = [];
+            const preClose = trendData.preClose;
+            
+            trendData.trends.forEach(item => {
+                const parts = item.split(',');
+                const t = parseTrendTime(parts[0]);
+                if (config.type === 'cn' && !isAshareTradingTimeLabel(t)) return;
+                const p = parseFloat(parts[1]);
+                if (!Number.isFinite(p)) return;
+                times.push(t);
+                prices.push(p);
+            });
+            
+            const indexChart = echarts.init(chartDom);
+            indexCharts[key] = indexChart;
+            
+            indexChart.setOption({
+                grid: { left: 30, right: 22, top: 10, bottom: 28, containLabel: true },
+                xAxis: {
+                    type: 'category', data: times, boundaryGap: true,
+                    axisLabel: {
+                        fontSize: 9,
+                        color: '#999',
+                        margin: 8,
+                        interval: (index) => {
+                            const total = times.length;
+                            if (total <= 6) return true;
+                            const step = Math.max(1, Math.floor(total / 4));
+                            if (index === 0 || index === total - 1) return true;
+                            return index % step === 0;
+                        },
+                        showMinLabel: true,
+                        showMaxLabel: true
+                    },
+                    axisLine: { lineStyle: { color: '#e5e5e5' } }, axisTick: { show: false }
+                },
+                yAxis: { type: 'value', scale: true, splitLine: { show: false }, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false } },
+                series: [{
+                    type: 'line', data: prices, smooth: true, symbol: 'none',
+                    lineStyle: { width: 1.5, color: prices[prices.length - 1] >= preClose ? '#dc2626' : '#059669' },
+                    areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: prices[prices.length - 1] >= preClose ? 'rgba(220, 38, 38, 0.1)' : 'rgba(5, 150, 105, 0.1)' }, { offset: 1, color: 'rgba(255, 255, 255, 0)' }]) }
+                }],
+                tooltip: {
+                    trigger: 'axis', confine: true,
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)', borderColor: '#e5e5e5', textStyle: { fontSize: 10 },
+                    formatter: (params) => { const param = params[0]; const change = ((param.data - preClose) / preClose * 100).toFixed(2); return `${param.name}<br/>${param.data.toFixed(2)} (${change >= 0 ? '+' : ''}${change}%)`; }
+                }
+            });
+        }
+
+        // 移动端菜单控制
+        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+        const sidebar = document.getElementById('sidebar');
+        const sidebarOverlay = document.getElementById('sidebarOverlay');
+        
+        mobileMenuBtn?.addEventListener('click', () => { mobileMenuBtn.classList.toggle('active'); sidebar.classList.toggle('open'); sidebarOverlay.classList.toggle('active'); });
+        sidebarOverlay?.addEventListener('click', () => { mobileMenuBtn.classList.remove('active'); sidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); });
+
+        // 多数据源配置
+        function ensureSourceStat(name) {
+            if (!name) return;
+            if (!sourceStats[name]) sourceStats[name] = { success: 0, fail: 0, totalTime: 0 };
+        }
+
+        async function runWithSourceStat(name, fn) {
+            ensureSourceStat(name);
+            const startTime = Date.now();
+            try {
+                const data = await fn();
+                const duration = Date.now() - startTime;
+                sourceStats[name].success++;
+                sourceStats[name].totalTime += duration;
+                updateSourceIndicator(name);
+                return data;
+            } catch (error) {
+                const duration = Date.now() - startTime;
+                sourceStats[name].fail++;
+                throw error;
+            }
+        }
+
+        function fetchJsonp(url, callbackParam, timeoutMs = 10000) {
+            return new Promise((resolve, reject) => {
+                const cbName = `__ff_jsonp_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+                const script = document.createElement('script');
+                const sep = url.includes('?') ? '&' : '?';
+                const timer = setTimeout(() => {
+                    cleanup();
+                    reject(new Error('timeout'));
+                }, timeoutMs);
+                const cleanup = () => {
+                    clearTimeout(timer);
+                    try { delete window[cbName]; } catch { window[cbName] = undefined; }
+                    script.remove();
+                };
+                window[cbName] = (data) => {
+                    cleanup();
+                    resolve(data);
+                };
+                script.onerror = () => {
+                    cleanup();
+                    reject(new Error('script load failed'));
+                };
+                script.src = `${url}${sep}${callbackParam}=${cbName}`;
+                document.head.appendChild(script);
+            });
+        }
+
+        function loadScript(url, timeoutMs = 12000) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                const timer = setTimeout(() => {
+                    cleanup();
+                    reject(new Error('timeout'));
+                }, timeoutMs);
+                const cleanup = () => {
+                    clearTimeout(timer);
+                    script.remove();
+                };
+                script.onload = () => {
+                    cleanup();
+                    resolve();
+                };
+                script.onerror = () => {
+                    cleanup();
+                    reject(new Error('script load failed'));
+                };
+                script.src = url;
+                document.head.appendChild(script);
+            });
+        }
+
+        async function fetchApidataViaScript(url, sourceName) {
+            return await runWithSourceStat(sourceName, async () => {
+                try { delete window.apidata; } catch { window.apidata = undefined; }
+                await loadScript(url, 12000);
+                const d = window.apidata;
+                if (!d) throw new Error('no apidata');
+                try { delete window.apidata; } catch { window.apidata = undefined; }
+                return d;
+            });
+        }
+
+        const DATA_SOURCES = {
+            fundgz_jsonp: {
+                name: 'fundgz_jsonp', priority: 1,
+                fetch: async (code) => {
+                    return await new Promise((resolve, reject) => {
+                        const script = document.createElement('script');
+                        const prev = window.jsonpgz;
+                        const timeout = setTimeout(() => { window.jsonpgz = prev; script.remove(); reject(new Error('timeout')); }, 8000);
+                        window.jsonpgz = (data) => { clearTimeout(timeout); window.jsonpgz = prev; script.remove(); resolve(data); };
+                        script.onerror = () => { clearTimeout(timeout); window.jsonpgz = prev; script.remove(); reject(new Error('script load failed')); };
+                        script.src = `https://fundgz.1234567.com.cn/js/${code}.js?rt=${Date.now()}`;
+                        document.head.appendChild(script);
+                    });
+                }
+            },
+            ttjj_api_jsonp: {
+                name: 'ttjj_api_jsonp', priority: 2,
+                fetch: async (code) => {
+                    const url = `https://api.fund.eastmoney.com/f10/lsjz?fundCode=${code}&pageIndex=1&pageSize=1&_=${Date.now()}`;
+                    const json = await fetchJsonp(url, 'callback', 12000);
+                    const latest = json?.Data?.LSJZList?.[0];
+                    if (!latest) throw new Error('No data');
+                    return { name: json.Data.SHORTNAME || code, dwjz: latest.DWJZ, jzrq: latest.FSRQ, gsz: latest.DWJZ, gszzl: latest.JZZZL || '0.00', gztime: latest.FSRQ + ' 15:00' };
+                }
+            },
+            pingzhongdata_script: {
+                name: 'pingzhongdata_script', priority: 3,
+                fetch: async (code) => {
+                    await loadScript(`https://fund.eastmoney.com/pingzhongdata/${code}.js?rt=${Date.now()}`, 12000);
+                    const name = (window.fS_name || window.fSName || '').toString();
+                    const navData = window.Data_netWorthTrend;
+                    if (!name || !Array.isArray(navData) || navData.length === 0) throw new Error('Parse failed');
+                    const latest = navData[navData.length - 1];
+                    const prev = navData.length >= 2 ? navData[navData.length - 2] : null;
+                    const dwjz = latest?.y;
+                    const jzrq = new Date(latest?.x).toISOString().split('T')[0];
+                    let gszzl = '0.00';
+                    if (prev && prev.y) gszzl = (((latest.y - prev.y) / prev.y) * 100).toFixed(2);
+                    return { name, dwjz: String(dwjz), jzrq, gsz: String(dwjz), gszzl, gztime: jzrq + ' 15:00' };
+                }
+            }
+        };
+
+        const sourceStats = {};
+        Object.values(DATA_SOURCES).forEach(s => ensureSourceStat(s.name));
+
+        async function fetchWithFallback(code) {
+            const sources = Object.values(DATA_SOURCES).sort((a, b) => {
+                ensureSourceStat(a.name);
+                ensureSourceStat(b.name);
+                const aSuccessRate = sourceStats[a.name].success / (sourceStats[a.name].success + sourceStats[a.name].fail || 1);
+                const bSuccessRate = sourceStats[b.name].success / (sourceStats[b.name].success + sourceStats[b.name].fail || 1);
+                if (Math.abs(aSuccessRate - bSuccessRate) > 0.1) return bSuccessRate - aSuccessRate;
+                return a.priority - b.priority;
+            });
+            
+            let lastError;
+            for (const source of sources) {
+                const startTime = Date.now();
+                try {
+                    console.log(`🔄 [${source.name}] 尝试获取数据...`);
+                    const data = await source.fetch(code);
+                    const duration = Date.now() - startTime;
+                    if (!data || !data.dwjz || !data.name) throw new Error('数据不完整');
+                    ensureSourceStat(source.name);
+                    sourceStats[source.name].success++;
+                    sourceStats[source.name].totalTime += duration;
+                    console.log(`✅ [${source.name}] 成功！耗时: ${duration}ms`);
+                    updateSourceIndicator(source.name);
+                    return data;
+                } catch (error) {
+                    const duration = Date.now() - startTime;
+                    ensureSourceStat(source.name);
+                    sourceStats[source.name].fail++;
+                    console.warn(`❌ [${source.name}] 失败: ${error.message} (${duration}ms)`);
+                    lastError = error;
+                    if (source !== sources[sources.length - 1]) { await new Promise(resolve => setTimeout(resolve, 200)); continue; }
+                }
+            }
+            throw lastError || new Error('所有数据源均失败');
+        }
+
+        function showSourceStats() { console.table(Object.entries(sourceStats).map(([name, stats]) => ({ 数据源: name, 成功: stats.success, 失败: stats.fail, 成功率: stats.success + stats.fail > 0 ? ((stats.success / (stats.success + stats.fail)) * 100).toFixed(1) + '%' : 'N/A', 平均耗时: stats.success > 0 ? (stats.totalTime / stats.success).toFixed(0) + 'ms' : 'N/A' }))); }
+        window.showSourceStats = showSourceStats;
+        
+        let lastSuccessfulSource = 'fundgz_jsonp';
+        document.getElementById('sourceIndicator')?.addEventListener('click', () => { openSourceStatsModal(); });
+        
+        function openSourceStatsModal() {
+            const modal = document.getElementById('sourceStatsModal');
+            const tbody = document.getElementById('sourceStatsTableBody');
+            const statsData = Object.entries(sourceStats).map(([name, stats]) => ({ name, success: stats.success, fail: stats.fail, successRate: stats.success + stats.fail > 0 ? ((stats.success / (stats.success + stats.fail)) * 100).toFixed(1) : 'N/A', avgTime: stats.success > 0 ? (stats.totalTime / stats.success).toFixed(0) : 'N/A' })).sort((a, b) => (parseFloat(b.successRate) || 0) - (parseFloat(a.successRate) || 0));
+            tbody.innerHTML = statsData.map(stat => { const rate = parseFloat(stat.successRate) || 0; const rateClass = rate >= 80 ? 'high' : rate >= 50 ? 'medium' : 'low'; return `<tr><td style="font-family: 'JetBrains Mono', monospace; font-size: 0.8125rem;">${stat.name}</td><td style="color: #10b981; font-weight: 600;">${stat.success}</td><td style="color: #ef4444; font-weight: 600;">${stat.fail}</td><td class="success-rate ${rateClass}">${stat.successRate}${stat.successRate !== 'N/A' ? '%' : ''}</td><td style="font-family: 'JetBrains Mono', monospace;">${stat.avgTime}${stat.avgTime !== 'N/A' ? 'ms' : ''}</td></tr>`; }).join('') || '<tr><td colspan="5" style="text-align: center; padding: 20px; color: var(--gray-500);">暂无数据</td></tr>';
+            modal.classList.add('active');
+        }
+        function closeSourceStats() { document.getElementById('sourceStatsModal').classList.remove('active'); }
+        document.getElementById('sourceStatsModal')?.addEventListener('click', (e) => { if (e.target.id === 'sourceStatsModal') closeSourceStats(); });
+        function updateSourceIndicator(sourceName) { lastSuccessfulSource = sourceName; const indicator = document.getElementById('currentSourceName'); if (indicator) indicator.textContent = sourceName; }
+
+        window.addEventListener('DOMContentLoaded', () => { console.log('Higher | 9880699@gmail.com'); initChart(); renderFundList(); fetchMarketIndices(); if (funds.length > 0) selectFund(funds[0]); startAutoUpdate(); });
+
+        function renderFundList() {
+            const listEl = document.getElementById('fundList');
+            if (funds.length === 0) { listEl.innerHTML = `<div class="empty-state"><div class="empty-icon">📊</div><div class="empty-text">还没有添加基金</div><div class="empty-subtext">输入基金代码开始监控</div></div>`; return; }
+            listEl.innerHTML = funds.map(fund => {
+                const isCollapsed = fund._cardCollapsed !== false; // 默认折叠
+                return `
+                <div class="fund-item ${selectedFund?.code === fund.code ? 'active' : ''} ${isCollapsed ? 'card-collapsed' : 'card-expanded'}" data-code="${fund.code}">
+                    <div class="fund-header" onclick="toggleFundCard('${fund.code}', event)">
+                        <div class="fund-info">
+                            <div class="fund-name">${fund.name || '加载中...'}<span class="fund-collapse-arrow ${isCollapsed ? 'collapsed' : ''}" id="arrow_${fund.code}">▼</span></div>
+                            <div class="fund-code">${fund.code}<span class="fund-code-chg ${fund.dayGrowth != null && fund.dayGrowth !== '--' ? (parseFloat(fund.dayGrowth) >= 0 ? 'positive' : 'negative') : 'neutral'}">${fund.dayGrowth != null && fund.dayGrowth !== '--' ? (parseFloat(fund.dayGrowth) >= 0 ? '+' : '') + parseFloat(fund.dayGrowth).toFixed(2) + '%' : '--'}</span></div>
+                        </div>
+                        <div class="fund-actions">
+                            <button class="btn-icon btn-edit" onclick="event.stopPropagation(); openPosModal('${fund.code}')" title="编辑持仓">✏️</button>
+                            <button class="btn-icon btn-refresh" onclick="event.stopPropagation(); fetchFundData(${JSON.stringify(fund).replace(/"/g, '&quot;')})">🔄</button>
+                            <button class="btn-icon btn-delete" onclick="event.stopPropagation(); deleteFund('${fund.code}')">🗑️</button>
+                        </div>
+                    </div>
+                    <div class="fund-body ${isCollapsed ? 'collapsed' : ''}" id="body_${fund.code}">
+                        <div class="fund-metrics">
+                            <div class="metric-card"><div class="metric-label">当前净值</div><div class="metric-value">${fund.currentNav || '--'}</div></div>
+                            <div class="metric-card"><div class="metric-label">日涨跌</div><div class="metric-value ${parseFloat(fund.dayGrowth) >= 0 ? 'positive' : 'negative'}">${fund.dayGrowth ? (parseFloat(fund.dayGrowth) >= 0 ? '+' : '') + fund.dayGrowth + '%' : '--'}</div></div>
+                        </div>
+                        <div class="fund-chart" id="miniChart_${fund.code}"></div>
+                    </div>
+                </div>`;
+            }).join('');
+            // 绑定卡片主区域点击 → 选中基金
+            listEl.querySelectorAll('.fund-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    if (e.target.closest('.fund-actions') || e.target.closest('.fund-header')) return;
+                    const fund = funds.find(f => f.code === item.dataset.code);
+                    if (fund) selectFund(fund);
+                });
+            });
+            funds.forEach(fund => setTimeout(() => initMiniChart(fund), 100));
+        }
+
+        function toggleFundCard(code, event) {
+            event.stopPropagation();
+            if (event.target.closest('.fund-actions')) return;
+            const fund = funds.find(f => f.code === code);
+            if (!fund) return;
+            const body = document.getElementById('body_' + code);
+            const arrow = document.getElementById('arrow_' + code);
+            if (!body) return;
+            const wasCollapsed = body.classList.contains('collapsed');
+            body.classList.toggle('collapsed');
+            if (arrow) arrow.classList.toggle('collapsed');
+            fund._cardCollapsed = !wasCollapsed;
+            const root = event.currentTarget?.closest('.fund-item');
+            if (root) {
+                root.classList.toggle('card-collapsed', fund._cardCollapsed !== false);
+                root.classList.toggle('card-expanded', fund._cardCollapsed === false);
+            }
+            // 展开时重新初始化迷你图
+            if (wasCollapsed) {
+                setTimeout(() => {
+                    if (miniCharts[code]) { miniCharts[code].dispose(); delete miniCharts[code]; }
+                    initMiniChart(fund);
+                }, 50);
+            }
+            // 同时选中该基金
+            selectFund(fund);
+        }
+
+
+        function initMiniChart(fund) {
+            const chartDom = document.getElementById(`miniChart_${fund.code}`);
+            if (!chartDom || miniCharts[fund.code]) return;
+            const miniChart = echarts.init(chartDom);
+            miniCharts[fund.code] = miniChart;
+            const baseValue = parseFloat(fund.estimatedNav || fund.currentNav || 1.5);
+            const stable = Number.isFinite(baseValue) ? baseValue : 1.5;
+            const data = Array.from({ length: 20 }, () => Number(stable.toFixed(4)));
+            miniChart.setOption({
+                grid: { left: 0, right: 0, top: 5, bottom: 5 },
+                xAxis: { type: 'category', show: false },
+                yAxis: { type: 'value', show: false },
+                series: [{ type: 'line', data: data, smooth: true, symbol: 'none', lineStyle: { width: 2, color: parseFloat(fund.dayGrowth) >= 0 ? '#ef4444' : '#10b981' }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: parseFloat(fund.dayGrowth) >= 0 ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)' }, { offset: 1, color: 'rgba(255,255,255,0)' }]) } }]
+            });
+            window.addEventListener('resize', () => miniChart.resize());
+        }
+
+        function getShanghaiTimeParts() {
+            const now = new Date();
+            const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(now);
+            const map = {}; parts.forEach(p => map[p.type] = p.value);
+            const dow = new Date(Date.UTC(map.year, map.month - 1, map.day)).getUTCDay();
+            return { year: parseInt(map.year), month: parseInt(map.month), day: parseInt(map.day), hour: parseInt(map.hour), minute: parseInt(map.minute), dow };
+        }
+
+        function formatLastGzTimeForAshare(gztime) {
+            if (!gztime || typeof gztime !== 'string') return gztime;
+            let m = gztime.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})\s+(\d{1,2}):(\d{2})/);
+            if (!m) return gztime;
+            const minutes = parseInt(m[4]) * 60 + parseInt(m[5]);
+            const date = `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+            return minutes > 15 * 60 ? `${date} 15:00` : `${date} ${m[4].padStart(2,'0')}:${m[5].padStart(2,'0')}`;
+        }
+
+        function getDateStr(dateTimeStr) {
+            if(!dateTimeStr) return '';
+            const m = dateTimeStr.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);
+            if(!m) return '';
+            return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
+        }
+
+        async function fetchFundData(fund) {
+            try {
+                const data = await (fundgzQueue = fundgzQueue.then(() => fetchWithFallback(fund.code)));
+                fund.name = data.name; fund.currentNav = data.dwjz; fund.dayGrowth = data.gszzl; fund.estimatedNav = data.gsz; fund.estimatedTime = data.gztime; fund.navDate = data.jzrq;
+                const status = getMarketStatus();
+                const seed = parseFloat(status.canRealtimeUpdate ? (data.gsz || data.dwjz) : data.dwjz);
+                if (!Array.isArray(fund.realtimeHistory)) fund.realtimeHistory = [];
+                if (fund.realtimeHistory.length === 0 && Number.isFinite(seed) && seed > 0) fund.realtimeHistory = [seed];
+                else if (status.canRealtimeUpdate) { const v = parseFloat(data.gsz); if (Number.isFinite(v) && v > 0) { fund.realtimeHistory.push(v); if (fund.realtimeHistory.length > 241) fund.realtimeHistory = fund.realtimeHistory.slice(-241); } }
+                fund.lastUpdateTime = formatLastGzTimeForAshare(data.gztime) || '';
+                saveFunds(); renderFundList();
+                if (selectedFund?.code === fund.code) { updateMainDisplay(fund); if (currentTimeRange === 'realtime') updateRealtimeChart(); }
+            } catch (e) { console.error('获取基金数据失败:', e); showToast('数据获取失败，请稍后重试', 'error'); }
+        }
+
+        function updateMainDisplay(fund) {
+            document.getElementById('selectedFundName').textContent = fund.name || '未知基金';
+            document.getElementById('selectedFundCode').textContent = fund.code;
+            document.getElementById('currentNav').textContent = fund.currentNav || '--';
+            document.getElementById('navDateLabel').textContent = fund.navDate ? fund.navDate.substring(5) : '--';
+
+            // 日涨跌幅 — 由 updateDayGrowthDisplay 负责渲染
+            updateDayGrowthDisplay(fund);
+            
+            if (fund.holdingCost && fund.holdingShares && fund.currentNav) {
+                const profit = (parseFloat(fund.currentNav) - fund.holdingCost) * fund.holdingShares;
+                const pp = ((parseFloat(fund.currentNav) - fund.holdingCost) / fund.holdingCost * 100);
+                document.getElementById('totalProfit').textContent = '¥' + profit.toFixed(2);
+                document.getElementById('totalProfit').className = `stat-value ${profit>=0?'positive':'negative'}`;
+                document.getElementById('profitPercent').textContent = (profit>=0?'+':'') + pp.toFixed(2) + '%';
+                document.getElementById('profitPercent').className = `stat-change ${profit>=0?'positive':'negative'}`;
+            } else { document.getElementById('totalProfit').textContent = '--'; document.getElementById('profitPercent').textContent = '未设置持仓'; }
+
+            const today = new Date();
+            const isWeekend = (today.getDay() === 0 || today.getDay() === 6);
+            
+            if (isWeekend) {
+                document.getElementById('estimatedNav').textContent = '--';
+                document.getElementById('estimatedChange').textContent = '周末休市';
+                document.getElementById('estimatedChange').className = 'stat-change';
+                document.getElementById('estLabel').textContent = '估算净值';
+            } else {
+                const navDateStr = getDateStr(fund.navDate);
+                const estDateStr = getDateStr(fund.estimatedTime);
+                if (!fund.estimatedNav || (navDateStr && estDateStr && navDateStr >= estDateStr)) {
+                    document.getElementById('estimatedNav').textContent = '--';
+                    document.getElementById('estimatedChange').textContent = '已更新为官方净值';
+                    document.getElementById('estimatedChange').className = 'stat-change';
+                } else {
+                    document.getElementById('estimatedNav').textContent = fund.estimatedNav;
+                    const ec = ((parseFloat(fund.estimatedNav) - parseFloat(fund.currentNav)) / parseFloat(fund.currentNav) * 100);
+                    document.getElementById('estimatedChange').textContent = (ec>=0?'+':'') + ec.toFixed(2) + '%';
+                    document.getElementById('estimatedChange').className = `stat-change ${ec>=0?'positive':'negative'}`;
+                    const status = getMarketStatus();
+                    document.getElementById('estLabel').textContent = status.isOpen ? '实时估值' : `估值 (${estDateStr ? estDateStr.slice(5) : '已收盘'})`;
+                }
+            }
+            document.getElementById('updateTime').textContent = '更新于 ' + (fund.lastUpdateTime || '--');
+            updateMarketStatusUI();
+        }
+
+        // ============================================================
+        // 日涨跌幅渲染 — 开盘中用持仓加权估算，未开盘用官方数据
+        // ============================================================
+        function updateDayGrowthDisplay(fund) {
+            const el = document.getElementById('dayGrowth');
+            const chgEl = document.getElementById('dayGrowthChange');
+            const status = getMarketStatus();
+            const cache = holdingsCache[fund.code];
+
+            // 使用估算条件:
+            //   市场正在交易 或 午间休市（上午已有数据）
+            //   且 holdingsCache 中有新鲜数据（< 5分钟）
+            const cacheAge = cache ? (Date.now() - cache.timestamp) : Infinity;
+            const useEstimation = (status.canRealtimeUpdate || status.reason === '午间休市') 
+                                  && cache 
+                                  && cacheAge < 300000;
+
+            if (useEstimation) {
+                // ── 开盘中: 显示持仓加权估算涨跌幅 ──
+                const est = cache.estDayChg;
+                el.innerHTML = (est >= 0 ? '+' : '') + est.toFixed(2) + '%';
+                el.className = `stat-value ${est >= 0 ? 'positive' : 'negative'}`;
+                if (chgEl) {
+                    chgEl.innerHTML = `TOP10权重 ${cache.top10Weight.toFixed(1)}% <span class="day-growth-source est">估算</span>`;
+                }
+            } else {
+                // ── 未开盘 / 缓存过期: 显示最近一次官方数据 (fundgz gszzl) ──
+                const dg = parseFloat(fund.dayGrowth);
+                el.innerHTML = !isNaN(dg) ? (dg >= 0 ? '+' : '') + dg.toFixed(2) + '%' : '--';
+                el.className = `stat-value ${!isNaN(dg) && dg >= 0 ? 'positive' : 'negative'}`;
+                if (chgEl) {
+                    chgEl.innerHTML = !isNaN(dg) 
+                        ? `最近一次净值变动 <span class="day-growth-source official">官方</span>` 
+                        : '--';
+                }
+            }
+        }
+
+        function updateMarketStatusUI() {
+            const s = getMarketStatus();
+            const el = document.getElementById('marketStatus');
+            el.className = `market-status ${s.isOpen?'open':'closed'}`;
+            el.innerHTML = `<span>${s.isOpen?'▶':'⏸'}</span><span>${s.isOpen?'交易中':s.reason}</span>`;
+        }
+
+        function getMarketStatus() {
+            const t = getShanghaiTimeParts();
+            const min = t.hour * 60 + t.minute;
+            if (t.dow === 0 || t.dow === 6) return { isOpen: false, reason: '周末休市', canRealtimeUpdate: false };
+            if ((min >= 570 && min < 690) || (min >= 780 && min < 900)) return { isOpen: true, reason: '交易中', canRealtimeUpdate: true };
+            return { isOpen: false, reason: min < 570 ? '盘前' : (min >= 900 ? '盘后' : '午间休市'), canRealtimeUpdate: false };
+        }
+
+        function saveFunds() { localStorage.setItem('funds', JSON.stringify(funds)); }
+        
+        async function addFund() {
+            const code = document.getElementById('fundCode').value.trim();
+            if (!/^\d{6}$/.test(code)) return showToast('请输入6位数字基金代码', 'error');
+            if (funds.some(f => f.code === code)) return showToast('该基金已存在', 'error');
+            const fund = { code, holdingCost: parseFloat(document.getElementById('holdingCost').value)||null, holdingShares: parseFloat(document.getElementById('holdingShares').value)||null, name: '加载中...', currentNav: '--', dayGrowth: '--' };
+            funds.push(fund); saveFunds(); renderFundList();
+            document.getElementById('fundCode').value = ''; document.getElementById('holdingCost').value = ''; document.getElementById('holdingShares').value = '';
+            await fetchFundData(fund); showToast('添加成功');
+            if (window.innerWidth <= 768) { mobileMenuBtn.classList.remove('active'); sidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); }
+        }
+        
+        function deleteFund(code) {
+            if (!confirm('确认删除该基金？')) return;
+            funds = funds.filter(f => f.code !== code); saveFunds();
+            if (miniCharts[code]) { miniCharts[code].dispose(); delete miniCharts[code]; }
+            if (selectedFund?.code === code) selectedFund = funds[0] || null;
+            renderFundList(); if(selectedFund) selectFund(selectedFund);
+        }
+
+        function selectFund(fund) {
+            selectedFund = fund; renderFundList(); updateMainDisplay(fund); loadHoldingsAndSectors(fund);
+            fetchHistoryData(fund.code, currentTimeRange !== 'realtime');
+            if (currentTimeRange === 'realtime') { updateRealtimeChart(); startRealtimeUpdate(); }
+            if (window.innerWidth <= 768) { mobileMenuBtn.classList.remove('active'); sidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); }
+        }
+
+        function getSecId(code) {
+            if (!code) return "";
+            // 过滤掉可能存在的字母前缀（如 sh601228 提取为 601228）
+            let pureCode = String(code).match(/\d{6}/);
+            if (pureCode) {
+                return pureCode[0];
+            }
+            return String(code).trim().substring(0, 6);
+        }
+
+        function openStockDetail(code) {
+            if (!code) return;
+            const stockCode = getSecId(code);
+            if (!/^\d{6}$/.test(stockCode)) {
+                console.warn("股票代码格式非法:", stockCode);
+                return;
+            }
+            // 构建百度小程序链接
+            const url = `https://pqa9p2.smartapps.baidu.com/pages/quote/quote?code=${stockCode}`;
+            window.open(url, '_blank', 'noopener,noreferrer');
+        }
+
+        // ============================================================
+        // 持仓加载 - 含 gushitong.baidu.com 新数据源（优先级最高）
+        // ============================================================
+        async function loadHoldingsAndSectors(fund) {
+            const tbody = document.getElementById('holdingsTableBody');
+            const tags = document.getElementById('sectorTags');
+            if (tbody) tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--gray-500); padding: 40px;">加载中...</td></tr>`;
+            if (tags) tags.innerHTML = `<span style="font-size: 0.8125rem; color: var(--gray-500);">加载中...</span>`;
+
+            // --- 数据源1 (优先): gushitong.baidu.com ———————————————
+            // 返回的JSON结构:
+            //   Result[0].DisplayData.resultData.tplData.result.content.tabs[0 (持仓tab)]
+            //     .content.heavyStock.body[]  → TOP 10 持仓股票
+            //     .content.industryPositon.list[] → 行业板块占比
+            const baiduTargetUrl = `https://gushitong.baidu.com/opendata?resource_id=5803&query=${fund.code}&new_need_di=1&source=qieman`;
+            const baiduProxyOff = (localStorage.getItem('BAIDU_PROXY_OFF') || '') === '1';
+            const baiduCorsProxy = ((localStorage.getItem('BAIDU_CORS_PROXY') || '').trim() || 'https://api.allorigins.win/get?url=');
+            const baiduAllowDirect = (localStorage.getItem('BAIDU_DIRECT') || '') === '1';
+
+            async function fetchBaiduViaProxy(targetUrl, proxyPrefix) {
+                const proxyUrl = `${proxyPrefix}${encodeURIComponent(targetUrl)}`;
+                const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(12000) });
+                if (!res.ok) throw new Error(`proxy http ${res.status}`);
+                let payload;
+                try {
+                    payload = await res.json();
+                } catch {
+                    const text = await res.text();
+                    payload = JSON.parse(text);
+                }
+                const raw = payload && typeof payload === 'object' && typeof payload.contents === 'string'
+                    ? payload.contents
+                    : payload;
+                if (typeof raw === 'string') return JSON.parse(raw);
+                return raw;
+            }
+
+            const baiduSources = [];
+            // 直连方案：若百度接口支持 JSONP（cb/callback），可绕过 CORS 且更快
+            // 注意：如果接口不支持 JSONP，这里会很快超时并自动回退到代理/东财备用源
+            baiduSources.push({
+                name: 'gushitong_jsonp',
+                fetch: async () => {
+                    try {
+                        return await fetchJsonp(baiduTargetUrl, 'cb', 2500);
+                    } catch {
+                        return await fetchJsonp(baiduTargetUrl, 'callback', 2500);
+                    }
+                }
+            });
+            if (!baiduProxyOff && baiduCorsProxy) {
+                baiduSources.push({
+                    name: 'gushitong_proxy',
+                    fetch: async () => await fetchBaiduViaProxy(baiduTargetUrl, baiduCorsProxy)
+                });
+            }
+            if (baiduAllowDirect) {
+                baiduSources.push({
+                    name: 'gushitong_direct',
+                    fetch: async () => {
+                        const res = await fetch(baiduTargetUrl, { signal: AbortSignal.timeout(10000) });
+                        return await res.json();
+                    }
+                });
+            }
+
+            let baiduData = null; // 解析后的结构化数据: { holdings: [...], sectors: [...] }
+
+            for (const source of baiduSources) {
+                try {
+                    console.log(`🔄 [持仓-${source.name}] 尝试获取...`);
+                    const json = await runWithSourceStat(`holdings_${source.name}`, async () => await source.fetch());
+
+                    // 深层解析路径
+                    const result = json?.Result?.[0];
+                    const tplData = result?.DisplayData?.resultData?.tplData?.result;
+                    const tabs = tplData?.content?.tabs;
+
+                    // tabs[0] 是 "持仓" tab (type: "position")
+                    const positionTab = tabs?.find(t => t.type === 'position') || tabs?.[0];
+                    const posContent = positionTab?.content;
+
+                    // heavyStock.body → TOP 10 股票
+                    const heavyStockBody = posContent?.heavyStock?.body;
+                    // industryPositon.list → 行业板块
+                    const industryList = posContent?.industryPositon?.list;
+                    // heavyStock 更新日期
+                    const holdingDate = posContent?.heavyStock?.titleHeader?.[1] || '';
+
+                    if (!heavyStockBody || heavyStockBody.length === 0) {
+                        throw new Error('heavyStock.body 为空');
+                    }
+
+                    // 映射持仓数据
+                    const holdings = heavyStockBody.map(item => ({
+                        name: item.name,                          // 股票名称
+                        code: item.code,                          // 股票代码
+                        ratio: parseFloat(item.positionProportion?.replace('%', '')) || 0  // 占净值比例
+                    }));
+
+                    // 映射行业板块数据
+                    const sectors = (industryList || []).map(item => ({
+                        name: item.text,                          // 行业名称
+                        weight: parseFloat(item.value?.replace('%', '')) || 0  // 占比
+                    }));
+
+                    baiduData = { holdings, sectors, holdingDate };
+                    console.log(`✅ [持仓-${source.name}] 成功! 持仓${holdings.length}条, 板块${sectors.length}条, 日期: ${holdingDate}`);
+                    break;
+
+                } catch (error) {
+                    console.warn(`❌ [持仓-${source.name}] 失败:`, error.message);
+                    continue;
+                }
+            }
+
+            // --- 数据源2 (备用): eastmoney HTML 爬取 ————————————————
+            if (!baiduData) {
+                console.log('⚠️ Baidu数据源全部失败，尝试eastmoney备用源...');
+                try {
+                    const url = `https://fundf10.eastmoney.com/FundArchivesDatas.aspx?type=jjcc&topline=10&code=${fund.code}&year=&month=&rt=${Date.now()}`;
+                    const apidata = await fetchApidataViaScript(url, 'holdings_eastmoney_apidata');
+                    const html = (apidata?.content || '').toString().replace(/\\r\\n/g, '').replace(/\\n/g, '').replace(/\\t/g, '').replace(/\\\//g, '/').replace(/\\\"/g, '"');
+                    const doc = new DOMParser().parseFromString(html, 'text/html');
+                    const tables = Array.from(doc.querySelectorAll('table'));
+                    const table = tables.find(t => {
+                        const thText = (t.querySelector('thead')?.textContent || t.textContent || '').replace(/\s+/g, '');
+                        return thText.includes('股票代码') && thText.includes('股票名称') && thText.includes('占净值');
+                    }) || tables[0];
+
+                    let holdings = [];
+                    if (table) {
+                        const ths = Array.from(table.querySelectorAll('thead th'));
+                        const norm = (s) => (s || '').replace(/\s+/g, '').replace(/\u00a0/g, '');
+                        const idxCode = ths.findIndex(th => norm(th.textContent).includes('股票代码'));
+                        const idxName = ths.findIndex(th => norm(th.textContent).includes('股票名称'));
+                        const idxRatio = ths.findIndex(th => {
+                            const t = norm(th.textContent);
+                            return t.includes('占净值') || t.includes('占净值比例');
+                        });
+
+                        const rows = Array.from(table.querySelectorAll('tbody tr'));
+                        holdings = rows.map(tr => {
+                            const tds = Array.from(tr.querySelectorAll('td'));
+                            if (tds.length === 0) return null;
+                            const code = (tds[idxCode]?.textContent || '').trim();
+                            const name = (tds[idxName]?.textContent || '').trim();
+                            const ratioText = (tds[idxRatio]?.textContent || '').trim();
+                            let ratio = 0;
+                            const m = ratioText.match(/(\d+(\.\d+)?)/);
+                            if (m) ratio = parseFloat(m[1]);
+                            return { code, name, ratio };
+                        }).filter(x => x && x.code && x.name).slice(0, 10);
+                    }
+
+                    if (holdings.length > 0) {
+                        baiduData = { holdings, sectors: [], holdingDate: '' };
+                        console.log(`✅ eastmoney备用源解析了 ${holdings.length} 条持仓`);
+                    }
+                } catch (e) {
+                    console.error('解析eastmoney持仓失败:', e);
+                }
+            }
+
+            // --- 无数据退出 ——————————————————————————————————————————
+            if (!baiduData || baiduData.holdings.length === 0) {
+                console.error('💥 所有持仓数据源均失败或无数据');
+                tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--gray-500);">数据加载失败，请稍后重试</td></tr>`;
+                tags.innerHTML = `<span style="font-size: 0.8125rem; color: var(--gray-500);">加载失败</span>`;
+                return;
+            }
+
+            // --- 渲染板块标签（行业占比）——————————————————————————————
+            // 如果有Baidu行业数据直接用；否则后面从eastmoney股票行情里归并
+            let sectorSource = 'baidu'; // 标记数据来源
+            if (baiduData.sectors.length > 0) {
+                tags.innerHTML = baiduData.sectors.slice(0, 6).map(s =>
+                    `<span class="sector-tag">${s.name} ${s.weight.toFixed(1)}%</span>`
+                ).join('');
+            } else {
+                sectorSource = 'eastmoney'; // 后续从行情归并
+                tags.innerHTML = `<span style="font-size: 0.8125rem; color: var(--gray-500);">板块数据加载中...</span>`;
+            }
+
+            // --- 获取股票实时行情（涨跌幅）————————————————————————————
+            const quoteSources = [
+                (secid) => `https://push2.eastmoney.com/api/qt/stock/get?secid=${secid}&fields=f3,f43,f100&_=${Date.now()}`
+            ];
+
+            console.log('📈 开始获取股票行情...');
+            const quotes = await Promise.all(baiduData.holdings.map(async h => {
+                const secid = getSecId(h.code);
+                for (const getUrl of quoteSources) {
+                    try {
+                        const qjson = await runWithSourceStat('quote_stock_get_jsonp', async () => await fetchJsonp(getUrl(secid), 'cb', 8000));
+                        if (qjson?.data) {
+                            const chg = qjson.data.f3;
+                            return { ...h, chg: (chg !== undefined && chg !== '-') ? chg : 0, price: qjson.data.f43 || 0, industry: qjson.data.f100 || '其他' };
+                        }
+                    } catch (err) { continue; }
+                }
+                return { ...h, chg: 0, price: 0, industry: '其他' };
+            }));
+
+            const top10WeightForDisplay = quotes.reduce((sum, h) => sum + (parseFloat(h.ratio) || 0), 0);
+            const top10WeightTag = `<span class="sector-tag top10-weight">前十持仓占比合计：${top10WeightForDisplay.toFixed(2)}%（股票持仓）</span>`;
+            if (tags) {
+                tags.innerHTML = top10WeightTag + tags.innerHTML;
+            }
+
+            // --- 渲染持仓表格 ————————————————————————————————————————
+            let holdingDateLabel = '';
+            if (baiduData.holdingDate) {
+                holdingDateLabel = ` <span style="font-size:0.7rem;color:var(--gray-500);font-weight:500;">(${baiduData.holdingDate})</span>`;
+            }
+            document.querySelector('.table-header').innerHTML = `基金持仓（TOP 10）${holdingDateLabel}`;
+
+            tbody.innerHTML = quotes.map(h => `
+                <tr onclick="openStockDetail('${h.code}')">
+                    <td>${h.name}</td>
+                    <td style="font-family:'JetBrains Mono',monospace;font-size:0.8125rem;">${h.code}</td>
+                    <td><strong>${h.ratio ? h.ratio.toFixed(2) + '%' : '--'}</strong></td>
+                    <td class="${h.chg >= 0 ? 'positive' : 'negative'}"><strong>${(h.chg > 0 ? '+' : '') + h.chg.toFixed(2) + '%'}</strong></td>
+                </tr>
+            `).join('');
+
+            // --- 如果板块数据来自eastmoney，从行情里归并行业信息 ————————
+            if (sectorSource === 'eastmoney') {
+                const sectors = {};
+                quotes.forEach(h => {
+                    const ind = h.industry || '其他';
+                    if (!sectors[ind]) sectors[ind] = { name: ind, weight: 0, chg: [] };
+                    sectors[ind].weight += (h.ratio || 0);
+                    if (h.chg !== undefined) sectors[ind].chg.push(h.chg);
+                });
+                const sortedSectors = Object.values(sectors).map(s => ({ ...s, avgChg: s.chg.length > 0 ? s.chg.reduce((a, b) => a + b, 0) / s.chg.length : 0 })).sort((a, b) => b.weight - a.weight).slice(0, 6);
+                const filteredSectors = sortedSectors.filter(s => s.name !== '其他');
+                const sectorHtml = filteredSectors.map(s =>
+                    `<span class="sector-tag ${s.avgChg >= 0 ? 'positive' : 'negative'}">${s.name} ${s.weight.toFixed(1)}% ${s.avgChg !== 0 ? '(' + (s.avgChg >= 0 ? '+' : '') + s.avgChg.toFixed(2) + '%)' : ''}</span>`
+                ).join('');
+                tags.innerHTML = top10WeightTag + (sectorHtml || '');
+            }
+
+            // --- 计算日涨跌幅估算（核心算法）————————————————————————————
+            // 公式: estimatedDayChg = Σ(w_i × chg_i) + (1 - W_top) × residual_rate
+            //   w_i         = 第i个股票占净值比例 (%)，如 9.32 表示 9.32%
+            //   chg_i       = 第i个股票今日实时涨跌幅 (%)
+            //   W_top       = TOP10 总权重之和 (%)，如 62.86
+            //   residual_rate = 剩余仓位的估算涨跌率
+            //                   当 fundgz gszzl 可用时反推: residual = (gszzl - top10_contribution) / (100 - W_top)
+            //                   当 gszzl 不可用或剩余权重为0时: residual = top10 加权平均涨跌率
+            // 注意: w_i 是百分比值 (如9.32)，所以 Σ(w_i × chg_i) 的单位是 %×%，需要 /100 归一化
+            {
+                const status = getMarketStatus();
+                if (status.canRealtimeUpdate || status.reason === '午间休市') {
+                    // 计算 TOP10 加权贡献
+                    let top10Weight = 0;      // TOP10 总权重 (%)
+                    let top10Contribution = 0; // TOP10 对涨跌的贡献 (%)
+                    quotes.forEach(h => {
+                        const w = h.ratio || 0;   // 占净值比例 (%)
+                        const c = h.chg || 0;     // 今日涨跌幅 (%)
+                        top10Weight += w;
+                        top10Contribution += (w / 100) * c; // w/100 把百分比转为比例，乘以chg(%)得到贡献(%)
+                    });
+
+                    let residualWeight = 100 - top10Weight; // 剩余仓位权重 (%)
+                    let residualRate = 0;                    // 剩余仓位估算涨跌率 (%)
+
+                    const fundgzGszzl = parseFloat(fund.dayGrowth); // fundgz 提供的整体估算涨跌幅 (%)
+                    if (!isNaN(fundgzGszzl) && residualWeight > 0.01) {
+                        // 用 fundgz 估算反推剩余仓位涨跌率
+                        // gszzl ≈ top10_contribution + (residualWeight/100) × residualRate
+                        // ⟹ residualRate = (gszzl - top10_contribution) / (residualWeight/100)
+                        residualRate = (fundgzGszzl - top10Contribution) / (residualWeight / 100);
+                        // 安全限制：剩余估算不能超过 TOP10 均值的 3倍，防止异常值
+                        const top10AvgRate = top10Weight > 0 ? top10Contribution / (top10Weight / 100) : 0;
+                        if (Math.abs(residualRate) > Math.abs(top10AvgRate) * 3 + 5) {
+                            residualRate = top10AvgRate; // 回退到TOP10均值
+                        }
+                    } else if (top10Weight > 0) {
+                        // gszzl 不可用时，用 TOP10 加权均值近似剩余部分
+                        residualRate = top10Contribution / (top10Weight / 100);
+                    }
+
+                    // 最终估算涨跌幅 = TOP10贡献 + 剩余仓位贡献
+                    const estDayChg = top10Contribution + (residualWeight / 100) * residualRate;
+
+                    // 存入缓存供 updateMainDisplay 使用
+                    holdingsCache[fund.code] = {
+                        top10Weight: top10Weight,
+                        top10Contribution: top10Contribution,
+                        residualWeight: residualWeight,
+                        residualRate: residualRate,
+                        estDayChg: estDayChg,
+                        timestamp: Date.now()
+                    };
+
+                    console.log(`📊 [日涨跌估算-${fund.code}] TOP10权重=${top10Weight.toFixed(2)}% 贡献=${top10Contribution.toFixed(4)}% 剩余估算率=${residualRate.toFixed(2)}% → 估算日涨跌幅=${estDayChg.toFixed(4)}%`);
+
+                    // 刷新主页显示
+                    if (selectedFund?.code === fund.code) {
+                        updateDayGrowthDisplay(fund);
+                    }
+                }
+            }
+        }
+
+        function initChart() {
+            const dom = document.getElementById('klineChart');
+            chart = echarts.init(dom);
+            chart.setOption({
+                tooltip: { trigger: 'axis', axisPointer: { type: 'cross' }, backgroundColor: 'rgba(255,255,255,0.95)', padding: 12 },
+                grid: { left: '3%', right: '4%', bottom: '20', top: '20', containLabel: true },
+                xAxis: { type: 'category', boundaryGap: false, axisLine: { lineStyle: { color: '#e5e5e5' } }, axisLabel: { color: '#737373' } },
+                yAxis: { type: 'value', scale: true, splitLine: { lineStyle: { color: '#f5f5f5' } }, axisLabel: { color: '#737373' } },
+                series: [{ name: '净值', type: 'line', smooth: true, symbol: 'none', lineStyle: { width: 3, color: '#3b82f6' }, areaStyle: { color: new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'rgba(59,130,246,0.3)'},{offset:1,color:'rgba(59,130,246,0.05)'}]) } }]
+            });
+            window.addEventListener('resize', () => chart.resize());
+        }
+
+        function changeTimeRange(range) {
+            currentTimeRange = range;
+            document.querySelectorAll('.time-tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            if (range === 'realtime') {
+                updateRealtimeChart();
+                startRealtimeUpdate();
+                if (selectedFund) fetchHistoryData(selectedFund.code, false);
+            }
+            else {
+                stopRealtimeUpdate();
+                if (!selectedFund) return;
+                if (historyCache[selectedFund.code]) { renderHistoryChart(selectedFund.code); }
+                else { fetchHistoryData(selectedFund.code, true); }
+            }
+        }
+
+        function updateRealtimeChart() {
+            if (!selectedFund) return;
+            document.getElementById('chartTypeLabel').innerHTML = `实时估值走势`;
+            const labels = [];
+            for (let m=570; m<=690; m++) labels.push(`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`);
+            for (let m=780; m<=900; m++) labels.push(`${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`);
+            const history = selectedFund.realtimeHistory || [];
+            chart.setOption({
+                xAxis: {
+                    data: labels,
+                    axisTick: { show: false },
+                    minorTick: { show: false },
+                    axisLabel: {
+                        color: '#737373',
+                        interval: 0,
+                        formatter: (value) => {
+                            if (value === '09:30') return '09:30';
+                            if (value === '11:30') return '11:30/13:00';
+                            if (value === '15:00') return '15:00';
+                            return '';
+                        }
+                    }
+                },
+                series: [{ data: history }]
+            });
+        }
+
+        // 根据时间范围计算截断时间戳（毫秒）
+        function getCutoffTimestamp(range) {
+            const t = getShanghaiTimeParts();
+            const today = new Date(Date.UTC(t.year, t.month - 1, t.day)); // 上海"今天"00:00 UTC
+            let cutoff;
+            switch (range) {
+                case '5d':  cutoff = new Date(today); cutoff.setUTCDate(cutoff.getUTCDate() - 7); break;
+                case '1m':  cutoff = new Date(today); cutoff.setUTCMonth(cutoff.getUTCMonth() - 1); break;
+                case '3m':  cutoff = new Date(today); cutoff.setUTCMonth(cutoff.getUTCMonth() - 3); break;
+                case '1y':  cutoff = new Date(today); cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 1); break;
+                case 'all': return 0; // 成立来不截断
+                default:    cutoff = new Date(today); cutoff.setUTCDate(cutoff.getUTCDate() - 7); break;
+            }
+            return cutoff.getTime();
+        }
+
+        // 将时间戳转为 YYYY-MM-DD（上海时区 +8）
+        function tsToDateStr(ts) {
+            const d = new Date(ts + 8 * 3600000); // 加8小时后按UTC读
+            const y = d.getUTCFullYear();
+            const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+            const dd = String(d.getUTCDate()).padStart(2, '0');
+            return `${y}-${m}-${dd}`;
+        }
+
+        // 从缓存数据渲染图表 + 历史表格（不发网络请求）
+        function renderHistoryChart(code) {
+            const all = historyCache[code];
+            if (!all || all.length === 0) return;
+
+            const cutoff = getCutoffTimestamp(currentTimeRange);
+            const data = all.filter(p => p.x >= cutoff); // 按时间戳截断
+
+            const labels = data.map(p => tsToDateStr(p.x));
+            const values = data.map(p => p.y);
+
+            const rangeLabel = { '5d':'1周', '1m':'1月', '3m':'3月', '1y':'1年', 'all':'成立来' };
+            document.getElementById('chartTypeLabel').innerHTML = `${rangeLabel[currentTimeRange] || ''}净值走势`;
+
+            chart.setOption({
+                xAxis: {
+                    data: labels,
+                    axisTick: { show: true },
+                    minorTick: { show: false },
+                    axisLabel: {
+                        color: '#737373',
+                        interval: 'auto',
+                        formatter: null
+                    }
+                },
+                series: [{ data: values }]
+            });
+        }
+
+        function resetHistoryTable(code) {
+            historyTableState.code = code;
+            historyTableState.rendered = 0;
+            const tbody = document.getElementById('historyTableBody');
+            if (tbody) tbody.innerHTML = '';
+            appendHistoryTableRows();
+        }
+
+        function appendHistoryTableRows() {
+            const code = historyTableState.code;
+            const all = code ? historyCache[code] : null;
+            const tbody = document.getElementById('historyTableBody');
+            if (!tbody) return;
+            if (!all || all.length === 0) {
+                if (historyTableState.rendered === 0) {
+                    tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--gray-500); padding: 40px;">暂无数据</td></tr>`;
+                }
+                return;
+            }
+
+            const start = historyTableState.rendered;
+            const end = Math.min(start + historyTableState.pageSize, all.length);
+            if (start >= end) return;
+
+            const rows = [];
+            for (let k = start; k < end; k++) {
+                const i = all.length - 1 - k;
+                if (i < 0) break;
+                const date = tsToDateStr(all[i].x);
+                const val = all[i].y;
+                const pct = i > 0 ? (((all[i].y - all[i - 1].y) / all[i - 1].y) * 100) : 0;
+                rows.push(`<tr><td>${date}</td><td>${val.toFixed(4)}</td><td>--</td><td class="${pct>=0?'positive':'negative'}">${pct ? (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%' : '--'}</td></tr>`);
+            }
+
+            if (historyTableState.rendered === 0) tbody.innerHTML = '';
+            tbody.insertAdjacentHTML('beforeend', rows.join(''));
+            historyTableState.rendered = end;
+        }
+
+        // 拉取 pingzhongdata 全历史并缓存，然后渲染
+        async function fetchHistoryData(code, renderChart = true) {
+            if (historyCache[code]) {
+                if (renderChart) renderHistoryChart(code);
+                resetHistoryTable(code);
+                return;
+            }
+
+            try {
+                console.log(`🔄 [历史-pingzhongdata] 拉取 ${code}...`);
+                await loadScript(`https://fund.eastmoney.com/pingzhongdata/${code}.js?rt=${Date.now()}`, 12000);
+                const raw = window.Data_netWorthTrend;
+                if (!Array.isArray(raw) || raw.length === 0) throw new Error('Data_netWorthTrend 为空');
+
+                // 缓存全部数据（每条 {x: 时间戳, y: 净值}）
+                historyCache[code] = raw.map(item => ({ x: item.x, y: item.y }));
+                console.log(`✅ [历史-pingzhongdata] ${code} 共 ${raw.length} 条，已缓存`);
+
+                // 用最新一条同步净值
+                if (selectedFund && selectedFund.code === code) {
+                    const latest = raw[raw.length - 1];
+                    const prev   = raw.length >= 2 ? raw[raw.length - 2] : null;
+                    const jzrq   = tsToDateStr(latest.x);
+                    if (jzrq > (selectedFund.navDate || '')) {
+                        selectedFund.navDate  = jzrq;
+                        selectedFund.currentNav = latest.y;
+                        selectedFund.dayGrowth  = prev ? parseFloat((((latest.y - prev.y) / prev.y) * 100).toFixed(2)) : 0;
+                        saveFunds();
+                        updateMainDisplay(selectedFund);
+                    }
+                }
+
+                if (renderChart) renderHistoryChart(code);
+                resetHistoryTable(code);
+            } catch(e) {
+                console.error('💥 历史数据加载失败:', e);
+                document.getElementById('historyTableBody').innerHTML = `<tr><td colspan="4" style="text-align:center;color:var(--gray-500);padding:40px;">数据加载失败</td></tr>`;
+            }
+        }
+
+        document.getElementById('historyScroll')?.addEventListener('scroll', (e) => {
+            const el = e.target;
+            if (!el) return;
+            if (el.scrollTop + el.clientHeight >= el.scrollHeight - 20) {
+                appendHistoryTableRows();
+            }
+        });
+
+        function startRealtimeUpdate() { stopRealtimeUpdate(); realtimeInterval = setInterval(() => { if(getMarketStatus().canRealtimeUpdate) { funds.forEach(fetchFundData); updateRealtimeChart(); } }, 60000); }
+        function stopRealtimeUpdate() { if(realtimeInterval) clearInterval(realtimeInterval); }
+        function startAutoUpdate() { updateInterval = setInterval(() => { if(getMarketStatus().canRealtimeUpdate) { funds.forEach(fetchFundData); fetchMarketIndices(); } }, 30000); }
+        function showToast(msg, type='success') { const t = document.createElement('div'); t.className=`toast ${type}`; t.innerText=msg; document.body.appendChild(t); setTimeout(()=>t.remove(), 3000); }
+
+        let _suggestTimer = null;
+        let _suggestItems = [];
+        let _suggestActive = -1;
+
+        async function fetchFundSuggest(keyword) {
+            const key = (keyword || '').trim();
+            if (!key) return [];
+            const url = `https://fundsuggest.eastmoney.com/FundSearch/api/FundSearchAPI.ashx?m=1&key=${encodeURIComponent(key)}`;
+            const json = await runWithSourceStat('fund_suggest_jsonp', async () => await fetchJsonp(url, 'callback', 8000));
+            const arr = json?.Datas || json?.data || [];
+            if (!Array.isArray(arr)) return [];
+            return arr.map(x => {
+                const code = (x.CODE || x.FCODE || x.code || '').toString();
+                const name = (x.NAME || x.SHORTNAME || x.name || '').toString();
+                const type = (x.JJType || x.type || '').toString();
+                return { code, name, type };
+            }).filter(x => /^\d{6}$/.test(x.code) && x.name);
+        }
+
+        function renderFundSuggest(items) {
+            const box = document.getElementById('fundSuggest');
+            if (!box) return;
+            _suggestItems = Array.isArray(items) ? items.slice(0, 12) : [];
+            _suggestActive = -1;
+            if (_suggestItems.length === 0) {
+                box.style.display = 'none';
+                box.innerHTML = '';
+                return;
+            }
+            box.style.display = 'block';
+            box.innerHTML = _suggestItems.map((it, idx) => {
+                const meta = it.type ? it.type : '基金';
+                return `<div class="fund-suggest-item" data-idx="${idx}" onclick="selectSuggestItem(${idx})"><div class="fund-suggest-left"><div class="fund-suggest-name">${it.name}</div><div class="fund-suggest-meta">${meta}</div></div><div class="fund-suggest-code">${it.code}</div></div>`;
+            }).join('');
+        }
+
+        function selectSuggestItem(idx) {
+            const it = _suggestItems[idx];
+            if (!it) return;
+            const input = document.getElementById('fundCode');
+            if (input) input.value = it.code;
+            const box = document.getElementById('fundSuggest');
+            if (box) { box.style.display = 'none'; box.innerHTML = ''; }
+            _suggestItems = [];
+            _suggestActive = -1;
+            input?.focus();
+        }
+
+        function moveSuggestActive(delta) {
+            const box = document.getElementById('fundSuggest');
+            if (!box || box.style.display === 'none') return;
+            const items = box.querySelectorAll('.fund-suggest-item');
+            if (!items || items.length === 0) return;
+            _suggestActive += delta;
+            if (_suggestActive < 0) _suggestActive = items.length - 1;
+            if (_suggestActive >= items.length) _suggestActive = 0;
+            items.forEach((el, i) => el.classList.toggle('active', i === _suggestActive));
+            const activeEl = items[_suggestActive];
+            if (activeEl) activeEl.scrollIntoView({ block: 'nearest' });
+        }
+
+        document.getElementById('fundCode')?.addEventListener('input', (e) => {
+            const v = (e.target.value || '').trim();
+            clearTimeout(_suggestTimer);
+            if (v.length < 2 || /^\d{6}$/.test(v)) { renderFundSuggest([]); return; }
+            _suggestTimer = setTimeout(async () => {
+                try {
+                    const items = await fetchFundSuggest(v);
+                    renderFundSuggest(items);
+                } catch {
+                    renderFundSuggest([]);
+                }
+            }, 220);
+        });
+
+        document.getElementById('fundCode')?.addEventListener('keydown', (e) => {
+            const box = document.getElementById('fundSuggest');
+            const visible = box && box.style.display !== 'none';
+            if (!visible) {
+                if (e.key === 'Enter') { addFund(); e.preventDefault(); }
+                return;
+            }
+            if (e.key === 'ArrowDown') { moveSuggestActive(1); e.preventDefault(); return; }
+            if (e.key === 'ArrowUp') { moveSuggestActive(-1); e.preventDefault(); return; }
+            if (e.key === 'Enter') {
+                if (_suggestActive >= 0) { selectSuggestItem(_suggestActive); }
+                else if (_suggestItems.length > 0) { selectSuggestItem(0); }
+                e.preventDefault();
+                return;
+            }
+            if (e.key === 'Escape') { renderFundSuggest([]); return; }
+        });
+
+        document.addEventListener('click', (e) => {
+            const box = document.getElementById('fundSuggest');
+            const input = document.getElementById('fundCode');
+            if (!box || !input) return;
+            if (e.target === input || box.contains(e.target)) return;
+            renderFundSuggest([]);
+        });
+    </script>
+</body>
+</html>
