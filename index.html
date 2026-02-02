@@ -1430,14 +1430,14 @@
                     const prevNav = prev ? Number(prev.y) : NaN;
                     const prevDate = prev ? tsToDateStr(prev.x) : '';
                     if (Number.isFinite(prevNav)) {
-                        navChangeEl.textContent = `前一交易日净值 ${prevNav.toFixed(4)}${prevDate ? `（${prevDate.slice(5)}）` : ''}`;
+                        navChangeEl.textContent = `前日净值 ${prevNav.toFixed(4)}${prevDate ? `（${prevDate.slice(5)}）` : ''}`;
                         navChangeEl.className = 'stat-change';
                     } else {
-                        navChangeEl.textContent = '前一交易日净值 --';
+                        navChangeEl.textContent = '前日净值 --';
                         navChangeEl.className = 'stat-change';
                     }
                 } else if (navDateStr0) {
-                    navChangeEl.textContent = `昨日净值 ${navDateStr0.slice(5)} 15:00`;
+                    navChangeEl.textContent = `最近披露 ${navDateStr0.slice(5)} 15:00`;
                     navChangeEl.className = 'stat-change';
                 } else {
                     navChangeEl.textContent = '等待净值更新';
@@ -1517,8 +1517,21 @@
                 }
             }
             const delayMin = getGzDelayMinutes(fund.estimatedTime);
-            const delayText = (Number.isFinite(delayMin) && delayMin >= 2) ? `（延迟${delayMin}分钟）` : '';
-            document.getElementById('updateTime').textContent = '更新于 ' + (fund.lastUpdateTime || '--') + delayText;
+            const sh2 = getShanghaiTimeParts();
+            const todayStr2 = `${sh2.year}-${String(sh2.month).padStart(2,'0')}-${String(sh2.day).padStart(2,'0')}`;
+            const navDateStr2 = getDateStr(fund.navDate);
+            let showUpdateTime = fund.lastUpdateTime || '--';
+            let useDelay = true;
+            // 若今日官方净值已出，但估值源(gztime)滞后到旧日期，避免“更新于 01-30”这种误导
+            if (navDateStr2 === todayStr2) {
+                const lastDateStr = getDateStr(showUpdateTime);
+                if (lastDateStr && lastDateStr !== todayStr2) {
+                    showUpdateTime = `${todayStr2} 15:00`;
+                    useDelay = false;
+                }
+            }
+            const delayText = (useDelay && Number.isFinite(delayMin) && delayMin >= 2) ? `（延迟${delayMin}分钟）` : '';
+            document.getElementById('updateTime').textContent = '更新于 ' + showUpdateTime + delayText;
             updateMarketStatusUI();
         }
 
@@ -1547,7 +1560,7 @@
                     el.className = `stat-value ${off >= 0 ? 'positive' : 'negative'}`;
                     if (chgEl) {
                         const offDate = navDateStr ? navDateStr.slice(5) : '';
-                        chgEl.innerHTML = `最近一次净值变动${offDate ? ' ' + offDate + ' 15:00' : ''} <span class="day-growth-source official">官方</span>`;
+                        chgEl.innerHTML = `最新净值变动${offDate ? ' ' + offDate + ' 15:00' : ''} <span class="day-growth-source official">官方</span>`;
                     }
                     return;
                 }
@@ -1591,7 +1604,7 @@
                 if (chgEl) {
                     const offDate = navDateStr ? navDateStr.slice(5) : '';
                     chgEl.innerHTML = !isNaN(dg)
-                        ? `最近一次净值变动${offDate ? ' ' + offDate + ' 15:00' : ''} <span class="day-growth-source official">官方</span>`
+                        ? `最新净值变动${offDate ? ' ' + offDate + ' 15:00' : ''} <span class="day-growth-source official">官方</span>`
                         : '--';
                 }
             }
