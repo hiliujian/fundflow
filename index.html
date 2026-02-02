@@ -1437,7 +1437,7 @@
                         navChangeEl.className = 'stat-change';
                     }
                 } else if (navDateStr0) {
-                    navChangeEl.textContent = `最近披露 ${navDateStr0.slice(5)} 15:00`;
+                    navChangeEl.textContent = `披露时间 ${navDateStr0.slice(5)} 15:00`;
                     navChangeEl.className = 'stat-change';
                 } else {
                     navChangeEl.textContent = '等待净值更新';
@@ -1560,7 +1560,7 @@
                     el.className = `stat-value ${off >= 0 ? 'positive' : 'negative'}`;
                     if (chgEl) {
                         const offDate = navDateStr ? navDateStr.slice(5) : '';
-                        chgEl.innerHTML = `最新净值变动${offDate ? ' ' + offDate + ' 15:00' : ''} <span class="day-growth-source official">官方</span>`;
+                        chgEl.innerHTML = `当日涨幅${offDate ? ' ' + offDate + ' 15:00' : ''} <span class="day-growth-source official">官方</span>`;
                     }
                     return;
                 }
@@ -1604,7 +1604,7 @@
                 if (chgEl) {
                     const offDate = navDateStr ? navDateStr.slice(5) : '';
                     chgEl.innerHTML = !isNaN(dg)
-                        ? `最新净值变动${offDate ? ' ' + offDate + ' 15:00' : ''} <span class="day-growth-source official">官方</span>`
+                        ? `当日涨幅${offDate ? ' ' + offDate + ' 15:00' : ''} <span class="day-growth-source official">官方</span>`
                         : '--';
                 }
             }
