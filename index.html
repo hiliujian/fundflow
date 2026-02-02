@@ -1419,6 +1419,32 @@
             document.getElementById('currentNav').textContent = fund.currentNav || '--';
             document.getElementById('navDateLabel').textContent = fund.navDate ? fund.navDate.substring(5) : '--';
 
+            const sh0 = getShanghaiTimeParts();
+            const todayStr0 = `${sh0.year}-${String(sh0.month).padStart(2,'0')}-${String(sh0.day).padStart(2,'0')}`;
+            const navDateStr0 = getDateStr(fund.navDate);
+            const navChangeEl = document.getElementById('navChange');
+            if (navChangeEl) {
+                if (navDateStr0 === todayStr0) {
+                    const raw = historyCache[fund.code];
+                    const prev = Array.isArray(raw) && raw.length >= 2 ? raw[raw.length - 2] : null;
+                    const prevNav = prev ? Number(prev.y) : NaN;
+                    const prevDate = prev ? tsToDateStr(prev.x) : '';
+                    if (Number.isFinite(prevNav)) {
+                        navChangeEl.textContent = `前一交易日净值 ${prevNav.toFixed(4)}${prevDate ? `（${prevDate.slice(5)}）` : ''}`;
+                        navChangeEl.className = 'stat-change';
+                    } else {
+                        navChangeEl.textContent = '前一交易日净值 --';
+                        navChangeEl.className = 'stat-change';
+                    }
+                } else if (navDateStr0) {
+                    navChangeEl.textContent = `昨日净值 ${navDateStr0.slice(5)} 15:00`;
+                    navChangeEl.className = 'stat-change';
+                } else {
+                    navChangeEl.textContent = '等待净值更新';
+                    navChangeEl.className = 'stat-change';
+                }
+            }
+
             // 日涨跌幅 — 由 updateDayGrowthDisplay 负责渲染
             updateDayGrowthDisplay(fund);
             
