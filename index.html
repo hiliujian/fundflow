@@ -1377,6 +1377,11 @@
         function updateMiniChart(fund) {
             const chartDom = document.getElementById(`miniChart_${fund.code}`);
             if (!chartDom) return;
+            const status = getMarketStatus();
+            if (!status.canRealtimeUpdate) {
+                // 休市/不开盘：保持最后一帧，避免反复 setOption 导致闪跳
+                return;
+            }
             const c = miniCharts[fund.code];
             if (!c) { initMiniChart(fund); return; }
             const dom0 = (typeof c.getDom === 'function') ? c.getDom() : null;
@@ -1600,7 +1605,12 @@
                 saveFunds();
                 if (!options.suppressRender) renderFundList();
                 // 同步迷你图与主图（同一份 realtimeHistory）
-                updateMiniChart(fund);
+                // 休市/不开盘时不刷新迷你图，避免闪跳；但允许首次初始化
+                if (status.canRealtimeUpdate && acceptGz) {
+                    updateMiniChart(fund);
+                } else {
+                    if (!miniCharts[fund.code]) initMiniChart(fund);
+                }
                 if (selectedFund?.code === fund.code) { updateMainDisplay(fund); if (currentTimeRange === 'realtime') updateRealtimeChart(); }
             } catch (e) { console.error('获取基金数据失败:', e); showToast('数据获取失败，请稍后重试', 'error'); }
         }
