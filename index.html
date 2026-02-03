@@ -25,6 +25,9 @@
         .logo-card::before { content: ''; position: absolute; top: -50%; right: -30px; width: 140px; height: 200%; background: linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0) 100%); transform: rotate(20deg); animation: shimmer 3s infinite; }
         @keyframes shimmer { 0% { transform: translateX(-100%) rotate(20deg); } 100% { transform: translateX(300%) rotate(20deg); } }
         .logo-content { position: relative; z-index: 1; }
+        .logo-summary { position: absolute; top: 10px; right: 12px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; font-size: 0.9rem; color: rgba(255,255,255,0.95); font-weight: 700; }
+        .logo-summary .line { display: flex; gap: 8px; }
+        .logo-summary .label { opacity: 0.9; font-weight: 600; }
         .logo-icon { width: 32px; height: 32px; background: rgba(255, 255, 255, 0.25); border: 2px solid rgba(255, 255, 255, 0.3); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.125rem; margin-bottom: 6px; backdrop-filter: blur(10px); }
         .logo { font-size: 1.125rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 4px; }
         .logo-subtitle { font-size: 0.75rem; opacity: 0.95; font-weight: 500; display: flex; align-items: center; gap: 8px; }
@@ -271,7 +274,7 @@
             .sidebar.open { transform: translateX(0); }
             .sidebar-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 999; }
             .sidebar-overlay.active { display: block; }
-            .main-content { margin-left: 0; }
+            .main-content { margin-left: 0; touch-action: pan-y; }
             .main-header { padding: 80px 16px 16px; }
             .fund-title-main { font-size: 1.25rem; }
             .stats-grid { grid-template-columns: 1fr; gap: 12px; }
@@ -354,12 +357,12 @@
                     <input type="text" id="posCode" disabled>
                 </div>
                 <div class="pos-field">
-                    <label>持仓成本（每份买入价）</label>
-                    <input type="number" id="posCost" placeholder="如 1.5200" step="0.0001">
+                    <label>买入金额</label>
+                    <input type="number" id="posAmount" placeholder="如 10000" step="0.01">
                 </div>
                 <div class="pos-field">
-                    <label>持仓份额</label>
-                    <input type="number" id="posShares" placeholder="如 10000">
+                    <label>买入时间</label>
+                    <input type="date" id="posBuyDate">
                 </div>
                 <div class="pos-quick-label">快速操作</div>
                 <div class="pos-quick-row">
@@ -385,6 +388,10 @@
                         <div class="logo-icon">📈</div>
                         <div class="logo">FundFlow</div>
                         <div class="logo-subtitle"><span class="status-indicator"></span><span>实时监控系统</span></div>
+                        <div class="logo-summary">
+                            <div class="line"><span class="label">持仓金额</span><span id="allPositionAmount">--</span></div>
+                            <div class="line"><span class="label">持仓收益</span><span id="allPositionProfit">--</span></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -425,8 +432,8 @@
                         </div>
                         <div class="fund-suggest" id="fundSuggest"></div>
                         <div class="optional-inputs">
-                            <input type="number" id="holdingCost" class="input-field input-small" placeholder="持仓成本(可选)">
-                            <input type="number" id="holdingShares" class="input-field input-small" placeholder="持仓份额(可选)">
+                            <input type="number" id="buyAmount" class="input-field input-small" placeholder="买入金额(可选)">
+                            <input type="date" id="buyDate" class="input-field input-small" placeholder="买入时间(可选)">
                         </div>
                         <div class="helper-text"><span>💡</span><span>输入持仓信息可查看收益详情</span></div>
                     </div>
@@ -507,7 +514,7 @@
                     <div class="table-header">历史净值数据</div>
                     <div class="history-scroll" id="historyScroll">
                         <table>
-                            <thead><tr><th>日期</th><th>单位净值</th><th>累计净值</th><th>日增长率</th></tr></thead>
+                            <thead><tr><th>日期</th><th>单位净值</th><th>日增长率</th><th>日净收益</th></tr></thead>
                             <tbody id="historyTableBody"><tr><td colspan="4" style="text-align: center; color: var(--gray-500); padding: 40px;">暂无数据</td></tr></tbody>
                         </table>
                     </div>
@@ -558,11 +565,11 @@
             _posEditCode = code;
             document.getElementById('posModalTitle').textContent = `编辑持仓 — ${fund.name || code}`;
             document.getElementById('posCode').value = code;
-            document.getElementById('posCost').value = fund.holdingCost != null ? fund.holdingCost : '';
-            document.getElementById('posShares').value = fund.holdingShares != null ? fund.holdingShares : '';
+            document.getElementById('posAmount').value = fund.buyAmount != null ? fund.buyAmount : (fund.holdingCost != null && fund.holdingShares != null ? (fund.holdingCost * fund.holdingShares) : '');
+            document.getElementById('posBuyDate').value = fund.buyDate != null ? fund.buyDate : '';
             document.getElementById('posModalOverlay').classList.add('active');
-            // 短延迟后 focus 成本输入框
-            setTimeout(() => document.getElementById('posCost').focus(), 120);
+            // 短延迟后 focus 金额输入框
+            setTimeout(() => document.getElementById('posAmount').focus(), 120);
         }
 
         function closePosModal() {
@@ -578,41 +585,42 @@
             if (!_posEditCode) return;
             const fund = funds.find(f => f.code === _posEditCode);
             if (!fund) return;
-            const costVal = document.getElementById('posCost').value.trim();
-            const sharesVal = document.getElementById('posShares').value.trim();
-            fund.holdingCost = costVal !== '' ? parseFloat(costVal) : null;
-            fund.holdingShares = sharesVal !== '' ? parseFloat(sharesVal) : null;
-            // 校验 NaN
-            if (fund.holdingCost !== null && isNaN(fund.holdingCost)) fund.holdingCost = null;
-            if (fund.holdingShares !== null && isNaN(fund.holdingShares)) fund.holdingShares = null;
+            const amountVal = document.getElementById('posAmount').value.trim();
+            const buyDateVal = (document.getElementById('posBuyDate').value || '').trim();
+            fund.buyAmount = amountVal !== '' ? parseFloat(amountVal) : null;
+            fund.buyDate = buyDateVal !== '' ? buyDateVal : null;
+            if (fund.buyAmount !== null && isNaN(fund.buyAmount)) fund.buyAmount = null;
+            if (fund.buyAmount !== null && fund.buyAmount <= 0) fund.buyAmount = null;
+            // 旧字段保留但不再维护
             saveFunds();
             closePosModal();
             renderFundList();
+            if (historyTableState?.code === fund.code) resetHistoryTable(fund.code);
             if (selectedFund?.code === _posEditCode || selectedFund?.code === fund.code) updateMainDisplay(fund);
             showToast('持仓信息已更新');
         }
 
         function posQuickAction(action) {
-            const sharesInput = document.getElementById('posShares');
-            const current = parseFloat(sharesInput.value) || 0;
+            const amountInput = document.getElementById('posAmount');
+            const current = parseFloat(amountInput.value) || 0;
             switch (action) {
                 case 'clear':
-                    sharesInput.value = '0';
+                    amountInput.value = '0';
                     break;
                 case 'half':
-                    sharesInput.value = Math.floor(current / 2);
+                    amountInput.value = (current / 2).toFixed(2);
                     break;
                 case 'third':
-                    sharesInput.value = Math.floor(current / 3);
+                    amountInput.value = (current / 3).toFixed(2);
                     break;
                 case 'quarter':
-                    sharesInput.value = Math.floor(current / 4);
+                    amountInput.value = (current / 4).toFixed(2);
                     break;
                 case 'double':
-                    sharesInput.value = current * 2;
+                    amountInput.value = (current * 2).toFixed(2);
                     break;
             }
-            sharesInput.dispatchEvent(new Event('input'));
+            amountInput.dispatchEvent(new Event('input'));
         }
 
         // 主页标题栏 stats 折叠/展开
@@ -1064,7 +1072,7 @@
         document.getElementById('sourceStatsModal')?.addEventListener('click', (e) => { if (e.target.id === 'sourceStatsModal') closeSourceStats(); });
         function updateSourceIndicator(sourceName) { lastSuccessfulSource = sourceName; const indicator = document.getElementById('currentSourceName'); if (indicator) indicator.textContent = sourceName; }
 
-        window.addEventListener('DOMContentLoaded', () => { console.log('Higher | 9880699@gmail.com'); initChart(); renderFundList(); fetchMarketIndices(); if (funds.length > 0) selectFund(funds[0]); startAutoUpdate(); });
+        window.addEventListener('DOMContentLoaded', () => { console.log('Higher | 9880699@gmail.com'); initChart(); renderFundList(); fetchMarketIndices(); initMobileSwipeNavigation(); if (funds.length > 0) selectFund(funds[0]); startAutoUpdate(); });
 
         function renderFundList() {
             const listEl = document.getElementById('fundList');
@@ -1107,12 +1115,163 @@
                 });
             });
             funds.forEach(fund => setTimeout(() => initMiniChart(fund), 100));
+            updateAllPositionSummary();
         }
 
         function refreshFundByCode(code) {
             const fund = funds.find(f => f.code === code);
             if (!fund) return;
             fetchFundData(fund);
+        }
+
+        function initMobileSwipeNavigation() {
+            const container = document.querySelector('.main-content');
+            if (!container) return;
+
+            let startX = 0;
+            let startY = 0;
+            let moved = false;
+            let tracking = false;
+            let pointerId = null;
+            let pointerCaptured = false;
+
+            const minDx = 60;
+            const maxDy = 45;
+            const ratio = 1.2;
+
+            function isMobile() {
+                return window.innerWidth <= 768;
+            }
+
+            function canHandle(e) {
+                if (!isMobile()) return false;
+                if (sidebar?.classList.contains('open') || sidebarOverlay?.classList.contains('active')) return false;
+                const t = e?.target;
+                if (t && (t.closest('input') || t.closest('textarea') || t.closest('select') || t.closest('button') || t.closest('a'))) return false;
+                return true;
+            }
+
+            function gotoDelta(delta) {
+                if (!Array.isArray(funds) || funds.length <= 1) return;
+                const idx = selectedFund ? funds.findIndex(f => f.code === selectedFund.code) : -1;
+                const cur = idx >= 0 ? idx : 0;
+                let next = cur + delta;
+                if (next < 0) next = funds.length - 1;
+                if (next >= funds.length) next = 0;
+                const f2 = funds[next];
+                if (f2) selectFund(f2);
+            }
+
+            function isInteractiveTarget(e) {
+                const t = e?.target;
+                if (!t) return false;
+                return !!(t.closest('input') || t.closest('textarea') || t.closest('select') || t.closest('button') || t.closest('a'));
+            }
+
+            function handleSwipeEnd(dx, dy) {
+                if (Math.abs(dx) >= minDx && Math.abs(dy) <= maxDy && Math.abs(dx) > Math.abs(dy) * ratio) {
+                    if (dx < 0) gotoDelta(+1);
+                    else gotoDelta(-1);
+                }
+            }
+
+            const hasPointer = typeof window !== 'undefined' && 'PointerEvent' in window;
+
+            if (hasPointer) {
+                container.addEventListener('pointerdown', (e) => {
+                    if (!canHandle(e)) return;
+                    if (isInteractiveTarget(e)) return;
+                    if (e.isPrimary === false) return;
+                    if (e.pointerType === 'mouse' && e.button !== 0) return;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    moved = false;
+                    tracking = true;
+                    pointerId = e.pointerId;
+                    pointerCaptured = false;
+                });
+
+                container.addEventListener('pointermove', (e) => {
+                    if (!tracking) return;
+                    if (pointerId !== null && e.pointerId !== pointerId) return;
+                    const dx = e.clientX - startX;
+                    const dy = e.clientY - startY;
+                    if (Math.abs(dx) > 8 || Math.abs(dy) > 8) moved = true;
+
+                    if (!pointerCaptured && Math.abs(dx) > Math.abs(dy) * ratio && Math.abs(dx) > 10) {
+                        try { container.setPointerCapture(e.pointerId); pointerCaptured = true; } catch (err) { /* ignore */ }
+                    }
+
+                    if (Math.abs(dy) > Math.abs(dx) * ratio) {
+                        tracking = false;
+                        pointerId = null;
+                        if (pointerCaptured) {
+                            try { container.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+                            pointerCaptured = false;
+                        }
+                        return;
+                    }
+
+                    if (Math.abs(dx) > Math.abs(dy) * ratio) {
+                        e.preventDefault();
+                    }
+                });
+
+                const pointerUpOrCancel = (e) => {
+                    if (!tracking) return;
+                    if (pointerId !== null && e.pointerId !== pointerId) return;
+                    const dx = e.clientX - startX;
+                    const dy = e.clientY - startY;
+                    const shouldHandle = tracking && moved && canHandle(e) && !isInteractiveTarget(e);
+
+                    tracking = false;
+                    pointerId = null;
+                    if (pointerCaptured) {
+                        try { container.releasePointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+                        pointerCaptured = false;
+                    }
+
+                    if (shouldHandle) handleSwipeEnd(dx, dy);
+                };
+
+                container.addEventListener('pointerup', pointerUpOrCancel);
+                container.addEventListener('pointercancel', pointerUpOrCancel);
+                return;
+            }
+
+            container.addEventListener('touchstart', (e) => {
+                if (!canHandle(e)) return;
+                const t = e.touches && e.touches[0];
+                if (!t) return;
+                startX = t.clientX;
+                startY = t.clientY;
+                moved = false;
+                tracking = true;
+            }, { passive: true });
+
+            container.addEventListener('touchmove', (e) => {
+                if (!tracking) return;
+                const t = e.touches && e.touches[0];
+                if (!t) return;
+                const dx = t.clientX - startX;
+                const dy = t.clientY - startY;
+                if (Math.abs(dx) > 8 || Math.abs(dy) > 8) moved = true;
+                if (Math.abs(dy) > Math.abs(dx) * ratio) {
+                    tracking = false;
+                }
+            }, { passive: true });
+
+            container.addEventListener('touchend', (e) => {
+                if (!tracking || !moved) { tracking = false; return; }
+                if (!canHandle(e)) { tracking = false; return; }
+                const t = e.changedTouches && e.changedTouches[0];
+                if (!t) { tracking = false; return; }
+                const dx = t.clientX - startX;
+                const dy = t.clientY - startY;
+                tracking = false;
+
+                handleSwipeEnd(dx, dy);
+            }, { passive: true });
         }
 
         function toggleFundCard(code, event) {
@@ -1449,23 +1608,36 @@
             updateDayGrowthDisplay(fund);
             
             const status = getMarketStatus();
-            // 持仓收益：今日官方未出但有估算时（盘后也可能），优先用估算净值参与计算，避免显示为 0
+            const shProfit = getShanghaiTimeParts();
+            const todayProfitStr = `${shProfit.year}-${String(shProfit.month).padStart(2,'0')}-${String(shProfit.day).padStart(2,'0')}`;
+            const navDateProfitStr = getDateStr(fund.navDate);
+            const officialNav0 = parseFloat(fund.currentNav);
             const profitNav0 = parseFloat(getDisplayNav(fund));
-            const profitNav = Number.isFinite(profitNav0)
-                ? profitNav0
-                : ((status.canRealtimeUpdate || status.reason === '午间休市' || status.reason === '盘后补全')
-                    ? parseFloat(fund.estimatedNav || fund.currentNav)
-                    : parseFloat(fund.currentNav));
-            if (fund.holdingCost && fund.holdingShares && Number.isFinite(profitNav)) {
-                const profit = (profitNav - fund.holdingCost) * fund.holdingShares;
-                const pp = ((profitNav - fund.holdingCost) / fund.holdingCost * 100);
-                document.getElementById('totalProfit').textContent = '¥' + profit.toFixed(2);
-                // 注意：本项目 CSS 定义 positive=红、negative=绿（涨红跌绿）
-                document.getElementById('totalProfit').className = `stat-value ${profit>=0?'positive':'negative'}`;
-                const ppEl = document.getElementById('profitPercent');
-                ppEl.textContent = (profit>=0?'+':'') + pp.toFixed(2) + '%';
-                ppEl.className = `stat-change ${profit>=0?'positive':'negative'}`;
-                ppEl.style.color = '';
+            const profitNav = (navDateProfitStr === todayProfitStr && Number.isFinite(officialNav0))
+                ? officialNav0
+                : (Number.isFinite(profitNav0)
+                    ? profitNav0
+                    : ((status.canRealtimeUpdate || status.reason === '午间休市' || status.reason === '盘后补全')
+                        ? parseFloat(fund.estimatedNav || fund.currentNav)
+                        : parseFloat(fund.currentNav)));
+            const pos = getPosition(fund);
+            if (pos.has && Number.isFinite(profitNav)) {
+                const m = calcPositionMetrics(pos, profitNav);
+                if (m.ok) {
+                    document.getElementById('totalProfit').textContent = '¥' + m.profit.toFixed(2);
+                    document.getElementById('totalProfit').className = `stat-value ${m.profit>=0?'positive':'negative'}`;
+                    const ppEl = document.getElementById('profitPercent');
+                    ppEl.textContent = '持仓金额 ¥' + m.value.toFixed(2);
+                    ppEl.className = 'stat-change';
+                    ppEl.style.color = '';
+                } else {
+                    document.getElementById('totalProfit').textContent = '--';
+                    document.getElementById('totalProfit').className = 'stat-value';
+                    const ppEl = document.getElementById('profitPercent');
+                    ppEl.textContent = '持仓金额 --';
+                    ppEl.className = 'stat-change';
+                    ppEl.style.color = '#000';
+                }
             } else {
                 document.getElementById('totalProfit').textContent = '--';
                 document.getElementById('totalProfit').className = 'stat-value';
@@ -1533,6 +1705,7 @@
             const delayText = (useDelay && Number.isFinite(delayMin) && delayMin >= 2) ? `（延迟${delayMin}分钟）` : '';
             document.getElementById('updateTime').textContent = '更新于 ' + showUpdateTime + delayText;
             updateMarketStatusUI();
+            updateAllPositionSummary();
         }
 
         // ============================================================
@@ -1670,14 +1843,135 @@
         }
 
         function saveFunds() { localStorage.setItem('funds', JSON.stringify(funds)); }
+
+        function getFundBuyInfo(fund) {
+            const amount = Number(fund?.buyAmount);
+            const date = (fund?.buyDate || '').toString();
+            if (!Number.isFinite(amount) || amount <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                return { amount: null, date: null };
+            }
+            return { amount, date };
+        }
+
+        function getFirstHistoryPointOnOrAfter(code, dateStr) {
+            const all = historyCache[code];
+            if (!Array.isArray(all) || all.length === 0 || !dateStr) return null;
+            for (let i = 0; i < all.length; i++) {
+                const d = tsToDateStr(all[i].x);
+                if (d >= dateStr) return { i, x: all[i].x, y: Number(all[i].y), date: d };
+            }
+            return null;
+        }
+
+        function getHistoryPointByDate(code, dateStr) {
+            const all = historyCache[code];
+            if (!Array.isArray(all) || all.length === 0 || !dateStr) return null;
+            for (let i = all.length - 1; i >= 0; i--) {
+                const d = tsToDateStr(all[i].x);
+                if (d === dateStr) return { i, x: all[i].x, y: Number(all[i].y), date: d };
+                if (d < dateStr) break;
+            }
+            return null;
+        }
+
+        function getPrevHistoryPoint(code, dateStr) {
+            const p = getHistoryPointByDate(code, dateStr);
+            if (!p) return null;
+            const all = historyCache[code];
+            const i = p.i - 1;
+            if (!Array.isArray(all) || i < 0) return null;
+            return { i, x: all[i].x, y: Number(all[i].y), date: tsToDateStr(all[i].x) };
+        }
+
+        function getPositionFromBuy(fund) {
+            const buy = getFundBuyInfo(fund);
+            if (!buy.amount || !buy.date) return { has: false };
+            const buyPoint = getFirstHistoryPointOnOrAfter(fund.code, buy.date);
+            const buyNav = buyPoint ? Number(buyPoint.y) : NaN;
+            if (!Number.isFinite(buyNav) || buyNav <= 0) return { has: false };
+            const shares = buy.amount / buyNav;
+            if (!Number.isFinite(shares) || shares <= 0) return { has: false };
+            return { has: true, amount: buy.amount, buyDate: buy.date, buyNav, shares };
+        }
+
+        function getPositionFromLegacy(fund) {
+            const cost = Number(fund?.holdingCost);
+            const shares = Number(fund?.holdingShares);
+            if (!Number.isFinite(cost) || cost <= 0 || !Number.isFinite(shares) || shares <= 0) return { has: false };
+            const amount = cost * shares;
+            return { has: true, amount, buyDate: null, buyNav: cost, shares };
+        }
+
+        function getPosition(fund) {
+            const p = getPositionFromBuy(fund);
+            if (p.has) return p;
+            return getPositionFromLegacy(fund);
+        }
+
+        function calcPositionMetrics(pos, nav) {
+            if (!pos || !pos.has || !Number.isFinite(nav) || nav <= 0) return { ok: false };
+            const invested = Number(pos.amount);
+            const buyNav = Number(pos.buyNav);
+            const shares = Number(pos.shares);
+            if (!Number.isFinite(invested) || invested <= 0 || !Number.isFinite(buyNav) || buyNav <= 0) return { ok: false };
+
+            // 复利口径：市值随净值比例变化（等价于 shares*nav）
+            const value = invested * (nav / buyNav);
+            const profit = value - invested;
+            const profitPct = invested ? (profit / invested * 100) : NaN;
+            return { ok: true, invested, value, profit, profitPct };
+        }
+
+        function updateAllPositionSummary() {
+            const amountEl = document.getElementById('allPositionAmount');
+            const profitEl = document.getElementById('allPositionProfit');
+            if (!amountEl || !profitEl) return;
+
+            amountEl.className = '';
+            profitEl.className = '';
+            amountEl.style.color = 'rgba(255,255,255,0.95)';
+            profitEl.style.color = 'rgba(255,255,255,0.95)';
+
+            let totalValue = 0;
+            let totalProfit = 0;
+            let hasAny = false;
+
+            for (const f of funds) {
+                const pos = getPosition(f);
+                if (!pos.has) continue;
+                const shProfit = getShanghaiTimeParts();
+                const todayProfitStr = `${shProfit.year}-${String(shProfit.month).padStart(2,'0')}-${String(shProfit.day).padStart(2,'0')}`;
+                const navDateProfitStr = getDateStr(f.navDate);
+                const officialNav0 = parseFloat(f.currentNav);
+                const dispNav0 = parseFloat(getDisplayNav(f));
+                const nav = (navDateProfitStr === todayProfitStr && Number.isFinite(officialNav0)) ? officialNav0 : dispNav0;
+                if (!Number.isFinite(nav)) continue;
+                hasAny = true;
+                const m = calcPositionMetrics(pos, nav);
+                if (!m.ok) continue;
+                totalValue += m.value;
+                totalProfit += m.profit;
+            }
+
+            if (!hasAny) {
+                amountEl.textContent = '--';
+                profitEl.textContent = '--';
+                return;
+            }
+
+            amountEl.textContent = '¥' + totalValue.toFixed(2);
+            profitEl.textContent = '¥' + totalProfit.toFixed(2);
+        }
         
         async function addFund() {
             const code = document.getElementById('fundCode').value.trim();
             if (!/^\d{6}$/.test(code)) return showToast('请输入6位数字基金代码', 'error');
             if (funds.some(f => f.code === code)) return showToast('该基金已存在', 'error');
-            const fund = { code, holdingCost: parseFloat(document.getElementById('holdingCost').value)||null, holdingShares: parseFloat(document.getElementById('holdingShares').value)||null, name: '加载中...', currentNav: '--', dayGrowth: '--' };
+            const buyAmount = parseFloat(document.getElementById('buyAmount').value);
+            const buyDate = (document.getElementById('buyDate').value || '').trim();
+            const fund = { code, buyAmount: Number.isFinite(buyAmount) && buyAmount > 0 ? buyAmount : null, buyDate: buyDate !== '' ? buyDate : null, name: '加载中...', currentNav: '--', dayGrowth: '--' };
             funds.push(fund); saveFunds(); renderFundList();
-            document.getElementById('fundCode').value = ''; document.getElementById('holdingCost').value = ''; document.getElementById('holdingShares').value = '';
+            document.getElementById('fundCode').value = ''; document.getElementById('buyAmount').value = ''; document.getElementById('buyDate').value = '';
             await fetchFundData(fund); showToast('添加成功');
             if (window.innerWidth <= 768) { mobileMenuBtn.classList.remove('active'); sidebar.classList.remove('open'); sidebarOverlay.classList.remove('active'); }
         }
@@ -2304,7 +2598,45 @@
                 const date = tsToDateStr(all[i].x);
                 const val = all[i].y;
                 const pct = i > 0 ? (((all[i].y - all[i - 1].y) / all[i - 1].y) * 100) : 0;
-                rows.push(`<tr><td>${date}</td><td>${val.toFixed(4)}</td><td>--</td><td class="${pct>=0?'positive':'negative'}">${pct ? (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%' : '--'}</td></tr>`);
+
+                let dayProfitText = '--';
+                let dayProfitClass = '';
+                const fund = funds.find(f => f.code === code);
+                if (fund && i > 0) {
+                    let shares = NaN;
+                    let buyDate = null;
+                    let effectiveBuyDate = null;
+                    const buyInfo = getFundBuyInfo(fund);
+                    if (buyInfo.amount && buyInfo.date) {
+                        const buyPoint = getFirstHistoryPointOnOrAfter(code, buyInfo.date);
+                        const buyNav = buyPoint ? Number(buyPoint.y) : NaN;
+                        if (Number.isFinite(buyNav) && buyNav > 0) {
+                            shares = buyInfo.amount / buyNav;
+                            buyDate = buyInfo.date;
+                            effectiveBuyDate = buyPoint.date;
+                        }
+                    }
+                    if (!Number.isFinite(shares) || shares <= 0) {
+                        const legacy = getPositionFromLegacy(fund);
+                        if (legacy.has) {
+                            shares = legacy.shares;
+                            buyDate = legacy.buyDate;
+                            effectiveBuyDate = null;
+                        }
+                    }
+                    if (Number.isFinite(shares) && shares > 0) {
+                        // 买入生效日（>=buyDate 的首个交易日）当天以及之前，日净收益为 0
+                        const isBeforeOrOnEffectiveBuy = effectiveBuyDate ? (date <= effectiveBuyDate) : (buyDate ? (date < buyDate) : false);
+                        const dayProfit = isBeforeOrOnEffectiveBuy ? 0 : ((all[i].y - all[i - 1].y) * shares);
+                        dayProfitText = '¥' + dayProfit.toFixed(2);
+                        dayProfitClass = dayProfit >= 0 ? 'positive' : 'negative';
+                    }
+                }
+
+                const pctText = (i > 0)
+                    ? ((pct >= 0 ? '+' : '') + pct.toFixed(2) + '%')
+                    : '--';
+                rows.push(`<tr><td>${date}</td><td>${val.toFixed(4)}</td><td class="${i > 0 ? (pct>=0?'positive':'negative') : ''}">${pctText}</td><td class="${dayProfitClass}">${dayProfitText}</td></tr>`);
             }
 
             if (historyTableState.rendered === 0) tbody.innerHTML = '';
