@@ -1423,20 +1423,29 @@
 
         function getRealtimeSeriesForChart(fund) {
             const baseValue = parseFloat(fund.estimatedNav || fund.currentNav || 1.5);
-            const stable = Number.isFinite(baseValue) ? baseValue : 1.5;
+            const stable = (Number.isFinite(baseValue) && baseValue > 0) ? baseValue : 1.5;
             const raw = Array.isArray(fund.realtimeHistory) ? fund.realtimeHistory : [];
             const out = new Array(242);
             let last = stable;
             // 不要把“未来时间段”用 last 值硬填满，否则午休/盘前会看起来像画到了 15:00。
             // 未来部分用 null，让折线在最后一个已知点处自然停止。
+            let firstKnown = -1;
             let lastKnown = -1;
+            for (let i = 0; i < raw.length; i++) {
+                if (Number.isFinite(raw[i])) { firstKnown = i; break; }
+            }
             for (let i = raw.length - 1; i >= 0; i--) {
                 if (Number.isFinite(raw[i])) { lastKnown = i; break; }
             }
             for (let i = 0; i < 242; i++) {
                 const v = raw[i];
                 if (Number.isFinite(v)) last = v;
-                out[i] = (lastKnown >= 0 && i <= lastKnown) ? last : null;
+                // 关键：首个已知点之前不要回填，避免把 10:30 的首条数据映射成 09:30-10:30
+                if (firstKnown >= 0 && i < firstKnown) {
+                    out[i] = null;
+                } else {
+                    out[i] = (lastKnown >= 0 && i <= lastKnown) ? last : null;
+                }
             }
             return out;
         }
@@ -1566,7 +1575,11 @@
                 }
                 fund.navDate = data.jzrq;
                 const status = getMarketStatus();
-                const seed = parseFloat(status.canRealtimeUpdate ? (data.gsz || data.dwjz) : data.dwjz);
+                const gszNum0 = parseFloat(data.gsz);
+                const dwjzNum0 = parseFloat(data.dwjz);
+                const seed = status.canRealtimeUpdate
+                    ? ((Number.isFinite(gszNum0) && gszNum0 > 0) ? gszNum0 : dwjzNum0)
+                    : dwjzNum0;
                 if (!Array.isArray(fund.realtimeHistory)) fund.realtimeHistory = [];
                 if (status.canRealtimeUpdate && acceptGz) {
                     const v0 = parseFloat(data.gsz);
@@ -2480,9 +2493,97 @@
                 grid: { left: '3%', right: '4%', bottom: '20', top: '20', containLabel: true },
                 xAxis: { type: 'category', boundaryGap: false, axisLine: { lineStyle: { color: '#e5e5e5' } }, axisLabel: { color: '#737373' } },
                 yAxis: { type: 'value', scale: true, splitLine: { lineStyle: { color: '#f5f5f5' } }, axisLabel: { color: '#737373' } },
-                series: [{ name: '净值', type: 'line', smooth: true, symbol: 'none', lineStyle: { width: 3, color: '#3b82f6' }, areaStyle: { color: new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'rgba(59,130,246,0.3)'},{offset:1,color:'rgba(59,130,246,0.05)'}]) } }]
+                series: [{ name: '净值', type: 'line', smooth: true, symbol: 'none', lineStyle: { width: 3, color: '#3b82f6' }, areaStyle: { color: new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'rgba(59,130,246,0.3)'},{offset:1,color:'rgba(59,130,246,0.05)'}]) }, emphasis: { focus: 'series' } }]
             });
+            initTurningPointMagnet();
             window.addEventListener('resize', () => chart.resize());
+        }
+
+        let _turningPointIdxs = [];
+        let _turningPointLabels = [];
+        let _magnetLock = false;
+
+        function setTurningPointMagnetData(labels, values, maxPoints) {
+            const idxs = pickTurningPoints(values, maxPoints);
+            _turningPointIdxs = Array.isArray(idxs) ? idxs.slice().sort((a, b) => a - b) : [];
+            _turningPointLabels = Array.isArray(labels) ? labels : [];
+        }
+
+        function findNearestIdx(sortedIdxs, target) {
+            if (!Array.isArray(sortedIdxs) || sortedIdxs.length === 0) return -1;
+            let lo = 0;
+            let hi = sortedIdxs.length - 1;
+            while (lo <= hi) {
+                const mid = (lo + hi) >> 1;
+                const v = sortedIdxs[mid];
+                if (v === target) return v;
+                if (v < target) lo = mid + 1;
+                else hi = mid - 1;
+            }
+            const candA = hi >= 0 ? sortedIdxs[hi] : null;
+            const candB = lo < sortedIdxs.length ? sortedIdxs[lo] : null;
+            if (candA === null) return candB ?? -1;
+            if (candB === null) return candA ?? -1;
+            return (Math.abs(candA - target) <= Math.abs(candB - target)) ? candA : candB;
+        }
+
+        function axisValueToIndex(val) {
+            if (typeof val === 'number' && Number.isFinite(val)) return val;
+            if (!val) return -1;
+            const s = String(val);
+            const idx = _turningPointLabels.indexOf(s);
+            return idx >= 0 ? idx : -1;
+        }
+
+        function initTurningPointMagnet() {
+            if (!chart) return;
+            chart.off('updateAxisPointer');
+            chart.on('updateAxisPointer', (e) => {
+                if (_magnetLock) return;
+                const info = e?.axesInfo?.[0];
+                if (!info) return;
+                const curIdx = axisValueToIndex(info.value);
+                if (curIdx < 0) return;
+                const nearest = findNearestIdx(_turningPointIdxs, curIdx);
+                if (nearest < 0) return;
+
+                const threshold = 2; // 离转折点 2 个点以内触发“磁吸”
+                if (Math.abs(nearest - curIdx) <= threshold && nearest !== curIdx) {
+                    _magnetLock = true;
+                    try {
+                        chart.dispatchAction({ type: 'showTip', seriesIndex: 0, dataIndex: nearest });
+                    } finally {
+                        setTimeout(() => { _magnetLock = false; }, 0);
+                    }
+                }
+            });
+        }
+
+        function pickTurningPoints(values, maxPoints = 12) {
+            if (!Array.isArray(values) || values.length < 3) return [];
+            const pts = [];
+            let lastFinite = -1;
+            for (let i = 0; i < values.length; i++) {
+                if (Number.isFinite(values[i])) { lastFinite = i; break; }
+            }
+            if (lastFinite < 0) return [];
+            let prev = values[lastFinite];
+            let prevDiff = 0;
+            for (let i = lastFinite + 1; i < values.length; i++) {
+                const v = values[i];
+                if (!Number.isFinite(v)) continue;
+                const diff = v - prev;
+                if (prevDiff !== 0 && diff !== 0 && (prevDiff > 0) !== (diff > 0)) {
+                    // 转折点出现在 prev 对应的索引附近
+                    pts.push({ idx: i - 1, score: Math.abs(prevDiff) + Math.abs(diff) });
+                }
+                if (diff !== 0) prevDiff = diff;
+                prev = v;
+            }
+            if (pts.length <= maxPoints) return pts.map(p => p.idx);
+            pts.sort((a, b) => b.score - a.score);
+            const top = pts.slice(0, maxPoints).map(p => p.idx).sort((a, b) => a - b);
+            return top;
         }
 
         function changeTimeRange(range) {
@@ -2519,18 +2620,22 @@
             document.getElementById('chartTypeLabel').innerHTML = `实时估值走势`;
             const { xData, yData } = getRealtimeChartData(selectedFund);
 
+            setTurningPointMagnetData(xData, yData, 16);
+
             const baseNav = parseFloat(selectedFund.currentNav);
             chart.setOption({
                 tooltip: {
                     trigger: 'axis',
+                    axisPointer: { type: 'cross' },
                     formatter: (params) => {
                         const pNav = params?.[0];
                         const t = pNav?.axisValueLabel || '';
-                        const nav = Number(pNav?.data);
+                        const rawNav = pNav?.data;
+                        const nav = (rawNav === null || rawNav === undefined) ? NaN : Number(rawNav);
                         const navText = Number.isFinite(nav) ? nav.toFixed(4) : '--';
 
                         let pct = NaN;
-                        if (Number.isFinite(baseNav) && baseNav !== 0 && Number.isFinite(nav)) {
+                        if (Number.isFinite(baseNav) && baseNav > 0 && Number.isFinite(nav)) {
                             pct = ((nav - baseNav) / baseNav) * 100;
                         }
                         const pctText = Number.isFinite(pct) ? ((pct >= 0 ? '+' : '') + pct.toFixed(2) + '%') : '--';
@@ -2593,10 +2698,13 @@
             const labels = data.map(p => tsToDateStr(p.x));
             const values = data.map(p => p.y);
 
+            setTurningPointMagnetData(labels, values, 18);
+
             const rangeLabel = { '5d':'1周', '1m':'1月', '3m':'3月', '1y':'1年', 'all':'成立来' };
             document.getElementById('chartTypeLabel').innerHTML = `${rangeLabel[currentTimeRange] || ''}净值走势`;
 
             chart.setOption({
+                tooltip: { axisPointer: { type: 'cross' } },
                 xAxis: {
                     data: labels,
                     axisTick: { show: true },
