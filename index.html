@@ -186,6 +186,18 @@
         .market-status.open { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
         .market-status.closed { background: var(--gray-50); color: var(--gray-700); border: 1px solid var(--gray-200); }
         .update-time { font-size: 0.8125rem; color: var(--gray-600); background: var(--gray-50); padding: 6px 14px; border-radius: 10px; border: 1px solid var(--gray-200); }
+        .remind-chip { font-size: 0.8125rem; color: #b45309; background: rgba(245, 158, 11, 0.10); padding: 6px 12px; border-radius: 10px; border: 1px solid rgba(245, 158, 11, 0.22); cursor: pointer; user-select: none; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
+        .remind-chip.active { color: #047857; background: rgba(16, 185, 129, 0.10); border-color: rgba(16, 185, 129, 0.22); }
+        .remind-chip.fired { color: var(--gray-700); background: var(--gray-50); border-color: var(--gray-200); }
+        .remind-chip.alert { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
+        .remind-chip.ring { animation: remindRing 0.8s ease-in-out infinite; transform-origin: 50% 0%; }
+        @keyframes remindRing { 0% { transform: rotate(0deg); } 15% { transform: rotate(10deg); } 30% { transform: rotate(-10deg); } 45% { transform: rotate(8deg); } 60% { transform: rotate(-8deg); } 75% { transform: rotate(4deg); } 100% { transform: rotate(0deg); } }
+        .remind-fired-hint { display: none; font-size: 0.75rem; color: var(--gray-700); background: white; border: 1px solid var(--gray-200); padding: 6px 10px; border-radius: 10px; cursor: pointer; user-select: none; max-width: 420px; }
+        .remind-fired-hint.show { display: inline-flex; align-items: center; }
+        .remind-fired-hint:hover { border-color: var(--gray-300); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08); }
+        .remind-fired-hint .rfh-viewport { height: 18px; overflow: hidden; display: block; }
+        .remind-fired-hint .rfh-inner { display: block; will-change: transform; }
+        .remind-fired-hint .rfh-item { height: 18px; line-height: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
         .stat-card { background: white; padding: 20px; border-radius: 16px; border: 2px solid var(--gray-200); transition: all 0.3s; position: relative; overflow: hidden; }
         .stat-card:hover { border-color: var(--primary-light); transform: translateY(-4px); box-shadow: 0 8px 24px rgba(59, 130, 246, 0.15); }
@@ -232,9 +244,14 @@
         .side-scroll tbody tr:hover td:first-child { color: var(--primary); text-decoration: underline; text-underline-offset: 3px; }
         .history-scroll { max-height: 360px; overflow-y: auto; }
         .data-table-container { background: white; border-radius: 20px; padding: 24px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06); border: 2px solid var(--gray-100); }
-        .toast { position: fixed; top: 24px; right: 24px; padding: 16px 24px; border-radius: 14px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15); z-index: 10000; animation: slideIn 0.3s ease-out; background: white; border: 2px solid var(--gray-200); }
+        .toast-container { position: fixed; top: 24px; right: 24px; display: flex; flex-direction: column; gap: 12px; z-index: 10000; pointer-events: none; }
+        .toast { padding: 16px 24px; border-radius: 14px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15); animation: slideIn 0.3s ease-out; background: white; border: 2px solid var(--gray-200); pointer-events: auto; }
         .toast.success { border-color: #10b981; background: #ecfdf5; }
         .toast.error { border-color: #ef4444; background: #fef2f2; }
+        .toast .toast-row { display: flex; align-items: flex-start; gap: 12px; }
+        .toast .toast-msg { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; line-height: 1.35; }
+        .toast .toast-close { margin-left: auto; border: none; background: transparent; cursor: pointer; font-size: 1rem; line-height: 1; color: var(--gray-700); padding: 0 2px; }
+        .toast .toast-close:hover { color: var(--gray-900); }
         @keyframes slideIn { from { transform: translateX(400px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
         .empty-state { text-align: center; padding: 60px 32px; color: var(--gray-500); }
         .empty-icon { font-size: 4rem; margin-bottom: 16px; opacity: 0.5; }
@@ -478,6 +495,8 @@
                             <span class="fund-code-large" id="selectedFundCode">--</span>
                             <div class="market-status closed" id="marketStatus"><span>⏸</span><span id="marketStatusText">休市中</span></div>
                             <div class="update-time" id="updateTime">--</div>
+                            <div class="remind-chip" id="remindChip" onclick="openReminderPrompt(event)">提醒</div>
+                            <div class="remind-fired-hint" id="remindFiredHint" onclick="jumpToLastFiredReminder(event)"></div>
                         </div>
                     </div>
                     <button class="header-collapse-btn" id="headerCollapseBtn" onclick="toggleHeaderStats()" title="折叠/展开">▼</button>
@@ -1661,7 +1680,7 @@
             const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Shanghai', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(now);
             const map = {}; parts.forEach(p => map[p.type] = p.value);
             const dow = new Date(Date.UTC(map.year, map.month - 1, map.day)).getUTCDay();
-            return { year: parseInt(map.year), month: parseInt(map.month), day: parseInt(map.day), hour: parseInt(map.hour), minute: parseInt(map.minute), dow };
+            return { year: parseInt(map.year), month: parseInt(map.month), day: parseInt(map.day), hour: parseInt(map.hour), minute: parseInt(map.minute), second: parseInt(map.second), dow };
         }
 
         function formatLastGzTimeForAshare(gztime) {
@@ -1703,6 +1722,9 @@
             else if (status.reason === '盘后补全') capMin = nowMinRaw;
             const nowMin = Math.min(nowMinRaw, capMin);
             const gzMinCapped = Math.min(gzMin, 900);
+
+            // 规则：只要已经拿到收盘(15:00)数据，就不再展示“延迟xx分钟”
+            if (gzMinCapped >= 900) return 0;
             const d = nowMin - gzMinCapped;
             if (!Number.isFinite(d) || d < 0) return null;
             return d;
@@ -1930,12 +1952,15 @@
                     }
                 }
             }
-            const delayMin = getGzDelayMinutes(fund.estimatedTime);
             const sh2 = getShanghaiTimeParts();
             const todayStr2 = `${sh2.year}-${String(sh2.month).padStart(2,'0')}-${String(sh2.day).padStart(2,'0')}`;
             const navDateStr2 = getDateStr(fund.navDate);
             let showUpdateTime = fund.lastUpdateTime || '--';
             let useDelay = true;
+            // 收盘数据已到：只要展示为 15:00，就不再显示“延迟xx分钟”（避免盘后补全/口径差异造成误导）
+            if (/\b15:00$/.test(showUpdateTime)) {
+                useDelay = false;
+            }
             // 若今日官方净值已出，但估值源(gztime)滞后到旧日期，避免“更新于 01-30”这种误导
             if (navDateStr2 === todayStr2) {
                 const lastDateStr = getDateStr(showUpdateTime);
@@ -1944,10 +1969,345 @@
                     useDelay = false;
                 }
             }
+            const delayMin = useDelay ? getGzDelayMinutes(showUpdateTime) : null;
             const delayText = (useDelay && Number.isFinite(delayMin) && delayMin >= 2) ? `（延迟${delayMin}分钟）` : '';
             document.getElementById('updateTime').textContent = '更新于 ' + showUpdateTime + delayText;
+            updateReminderBadge();
+            updateLastFiredReminderHint();
+            rescheduleReminder();
             updateMarketStatusUI();
             updateAllPositionSummary();
+        }
+
+        const REMINDER_STORAGE_KEY = 'fund_reminders_v1';
+        const LAST_FIRED_REMINDER_KEY = 'fund_reminders_last_fired_v1';
+        let reminderTimer = null;
+        let reminderScheduleKey = null;
+        let reminderNextAtMs = null;
+        let lastFiredHintTimer = null;
+        let lastFiredHintIndex = 0;
+
+        function loadReminders() {
+            try {
+                const raw = localStorage.getItem(REMINDER_STORAGE_KEY);
+                const obj = raw ? JSON.parse(raw) : null;
+                return (obj && typeof obj === 'object') ? obj : {};
+            } catch { return {}; }
+        }
+
+        function saveReminders(map) {
+            try { localStorage.setItem(REMINDER_STORAGE_KEY, JSON.stringify(map || {})); } catch {}
+        }
+
+        function getSelectedReminder() {
+            if (!selectedFund?.code) return null;
+            const all = loadReminders();
+            const r = all[selectedFund.code];
+            if (!r || !r.time || typeof r.time !== 'string') return null;
+            if (!/^\d{2}:\d{2}$/.test(r.time)) return null;
+            return r;
+        }
+
+        function loadLastFiredReminder() {
+            try {
+                const raw = localStorage.getItem(LAST_FIRED_REMINDER_KEY);
+                const obj = raw ? JSON.parse(raw) : null;
+                return (obj && typeof obj === 'object') ? obj : null;
+            } catch {
+                return null;
+            }
+        }
+
+        function saveLastFiredReminder(data) {
+            try { localStorage.setItem(LAST_FIRED_REMINDER_KEY, JSON.stringify(data || null)); } catch {}
+        }
+
+        function updateLastFiredReminderHint() {
+            const el = document.getElementById('remindFiredHint');
+            if (!el) return;
+            const last = loadLastFiredReminder();
+            if (lastFiredHintTimer) { clearInterval(lastFiredHintTimer); lastFiredHintTimer = null; }
+            lastFiredHintIndex = 0;
+            if (!last || !last.date || (!Array.isArray(last.items) && (!last.code || !last.time))) {
+                el.innerHTML = '';
+                el.classList.remove('show');
+                return;
+            }
+            const sh = getShanghaiTimeParts();
+            const todayStr = `${sh.year}-${String(sh.month).padStart(2,'0')}-${String(sh.day).padStart(2,'0')}`;
+            if (last.date !== todayStr) {
+                el.innerHTML = '';
+                el.classList.remove('show');
+                return;
+            }
+            const items0 = Array.isArray(last.items) ? last.items : [{ code: last.code, name: last.name, time: last.time }];
+            const items = items0
+                .filter(x => x && x.code && x.time)
+                .map(x => ({ code: x.code, name: x.name || x.code, time: x.time }));
+            const visibleItems = selectedFund?.code ? items.filter(x => x.code !== selectedFund.code) : items;
+            if (visibleItems.length === 0) {
+                el.innerHTML = '';
+                el.classList.remove('show');
+                return;
+            }
+            const listHtml = visibleItems
+                .concat(visibleItems.length > 1 ? [visibleItems[0]] : [])
+                .map(x => `<div class="rfh-item" data-code="${x.code}">最近提醒：${x.name}（${x.code}）${x.time}</div>`)
+                .join('');
+            el.innerHTML = `<span class="rfh-viewport"><span class="rfh-inner">${listHtml}</span></span>`;
+            el.classList.add('show');
+
+            if (visibleItems.length > 1) {
+                const inner = el.querySelector('.rfh-inner');
+                const itemH = 18;
+                const count = visibleItems.length;
+                lastFiredHintTimer = setInterval(() => {
+                    lastFiredHintIndex++;
+                    if (!inner) return;
+                    inner.style.transition = 'transform 0.35s ease';
+                    inner.style.transform = `translateY(${-lastFiredHintIndex * itemH}px)`;
+                    if (lastFiredHintIndex === count) {
+                        setTimeout(() => {
+                            if (!inner) return;
+                            inner.style.transition = 'none';
+                            inner.style.transform = 'translateY(0px)';
+                            lastFiredHintIndex = 0;
+                        }, 380);
+                    }
+                }, 2200);
+            }
+        }
+
+        function jumpToLastFiredReminder(e) {
+            e?.stopPropagation?.();
+            const code = e?.target?.closest?.('[data-code]')?.getAttribute?.('data-code');
+            const targetCode = code || loadLastFiredReminder()?.code;
+            if (!targetCode) return;
+            const target = funds.find(f => f.code === targetCode);
+            if (target) selectFund(target);
+        }
+
+        function updateReminderBadge() {
+            const el = document.getElementById('remindChip');
+            if (!el) return;
+            // 触发提醒后的 1 分钟报警态由 fireReminder 控制，避免被刷新逻辑覆盖
+            if (el.classList.contains('alert')) return;
+            const r = getSelectedReminder();
+            const sh = getShanghaiTimeParts();
+            const todayStr = `${sh.year}-${String(sh.month).padStart(2,'0')}-${String(sh.day).padStart(2,'0')}`;
+            if (r) {
+                el.classList.remove('alert');
+                if (hasFiredTodayForThisTime(r, todayStr)) {
+                    el.classList.remove('active');
+                    el.classList.add('fired');
+                    el.textContent = `⏰ 已提醒 ${r.time}`;
+                } else {
+                    el.classList.remove('fired');
+                    el.classList.add('active');
+                    el.textContent = `⏰ ${r.time}`;
+                }
+            } else {
+                el.classList.remove('active');
+                el.classList.remove('fired');
+                el.classList.remove('alert');
+                el.classList.remove('ring');
+                el.textContent = '提醒';
+            }
+        }
+
+        function hasFiredTodayForThisTime(r, todayStr) {
+            if (!r) return false;
+            if (r.lastFiredDate !== todayStr) return false;
+            // 兼容旧数据：若没有 lastFiredTime，则视为当日已提醒（但修改时间时会清空 lastFiredDate）
+            if (!r.lastFiredTime) return true;
+            return r.lastFiredTime === r.time;
+        }
+
+        function getReminderTargetMin(r) {
+            if (!r?.time || typeof r.time !== 'string') return null;
+            const m = r.time.match(/^(\d{2}):(\d{2})$/);
+            if (!m) return null;
+            const hh = parseInt(m[1], 10);
+            const mm = parseInt(m[2], 10);
+            if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+            return hh * 60 + mm;
+        }
+
+        function getShanghaiDateStrOffset(days) {
+            const sh = getShanghaiTimeParts();
+            const d = new Date(Date.UTC(sh.year, sh.month - 1, sh.day + (days || 0)));
+            const y = d.getUTCFullYear();
+            const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+            const dd = String(d.getUTCDate()).padStart(2, '0');
+            return `${y}-${m}-${dd}`;
+        }
+
+        function checkReminderDue() {
+            const r = getSelectedReminder();
+            if (!r || !selectedFund?.code) return false;
+            const sh = getShanghaiTimeParts();
+            const todayStr = `${sh.year}-${String(sh.month).padStart(2,'0')}-${String(sh.day).padStart(2,'0')}`;
+            if (hasFiredTodayForThisTime(r, todayStr)) return false;
+            const targetMin = getReminderTargetMin(r);
+            if (!Number.isFinite(targetMin)) return false;
+            const nowMin = sh.hour * 60 + sh.minute;
+            // 只在到点这一分钟触发；若设置时间早于当前时间，则视为下一天（不立刻补触发）
+            if (nowMin === targetMin) return true;
+            return false;
+        }
+
+        function openReminderPrompt(e) {
+            e?.stopPropagation?.();
+            if (!selectedFund?.code) return;
+            const r = getSelectedReminder();
+            const current = r?.time || '';
+            const input = prompt('设置提醒时间(HH:MM)，留空取消', current || '14:55');
+            if (input === null) return;
+            const all = loadReminders();
+            const v = (input || '').trim();
+            if (!v) {
+                delete all[selectedFund.code];
+                saveReminders(all);
+                updateReminderBadge();
+                rescheduleReminder();
+                showToast(`${selectedFund.name || selectedFund.code} 已取消提醒`);
+                return;
+            }
+            if (!/^\d{1,2}:\d{2}$/.test(v)) {
+                alert('格式不正确，请输入 HH:MM，例如 14:55');
+                return;
+            }
+            const [hhRaw, mmRaw] = v.split(':');
+            const hh = String(Math.min(23, Math.max(0, parseInt(hhRaw, 10)))).padStart(2,'0');
+            const mm = String(Math.min(59, Math.max(0, parseInt(mmRaw, 10)))).padStart(2,'0');
+            const nextTime = `${hh}:${mm}`;
+            const prev = all[selectedFund.code];
+            const prevTime = prev?.time || null;
+            const keepFired = prevTime && prevTime === nextTime;
+            all[selectedFund.code] = {
+                time: nextTime,
+                lastFiredDate: keepFired ? (prev?.lastFiredDate || null) : null,
+                lastFiredTime: keepFired ? (prev?.lastFiredTime || prevTime || null) : null
+            };
+            saveReminders(all);
+            updateReminderBadge();
+            rescheduleReminder();
+            showToast(`${selectedFund.name || selectedFund.code} 已设置提醒 ${hh}:${mm}`);
+        }
+
+        function rescheduleReminder() {
+            // 说明：该函数会在刷新循环中被频繁调用。
+            // 若每次都 clearTimeout + 重设，会在临界 1 分钟内不断改写定时器，极端情况下会错过触发。
+            const r = getSelectedReminder();
+            if (!r) return;
+
+            const sh = getShanghaiTimeParts();
+            const todayStr = `${sh.year}-${String(sh.month).padStart(2,'0')}-${String(sh.day).padStart(2,'0')}`;
+            if (hasFiredTodayForThisTime(r, todayStr)) return;
+
+            // 若已到点/过点，立刻补触发一次（修复“设置了但没提醒/已过点仍显示已设置”）
+            if (checkReminderDue()) {
+                // 注意：页面可能在轮询刷新时频繁调用 rescheduleReminder，若使用短 setTimeout 会被不断 clearTimeout 导致永不触发
+                // 这里直接触发，由 lastFiredDate/lastFiredTime 负责防重
+                fireReminder();
+                return;
+            }
+
+            const [hh, mm] = r.time.split(':').map(x => parseInt(x, 10));
+            const sh2 = getShanghaiTimeParts();
+            const nowMin = sh2.hour * 60 + sh2.minute;
+            const targetMin = hh * 60 + mm;
+            let minutesLeft = targetMin - nowMin;
+            const targetOffsetDays = minutesLeft < 0 ? 1 : 0;
+            if (minutesLeft < 0) minutesLeft += 1440;
+            const targetDateStr = getShanghaiDateStrOffset(targetOffsetDays);
+            const scheduleKey = `${selectedFund.code}|${r.time}|${targetDateStr}`;
+
+            // 如果当前已有同一个 scheduleKey 的计时器，就不要重复 clear/re-schedule
+            if (reminderTimer && reminderScheduleKey === scheduleKey && Number.isFinite(reminderNextAtMs)) {
+                return;
+            }
+            if (reminderTimer) { clearTimeout(reminderTimer); reminderTimer = null; }
+
+            // 若已经进入目标分钟（可能 seconds 不同），直接触发
+            if (minutesLeft === 0) {
+                reminderScheduleKey = scheduleKey;
+                reminderNextAtMs = Date.now();
+                fireReminder();
+                return;
+            }
+
+            const delay = Math.max(200, minutesLeft * 60000 - ((sh2.second || 0) * 1000));
+            reminderScheduleKey = scheduleKey;
+            reminderNextAtMs = Date.now() + delay;
+            reminderTimer = setTimeout(() => fireReminder(), delay);
+        }
+
+        async function fireReminder() {
+            const r = getSelectedReminder();
+            if (!r || !selectedFund?.code) return;
+            const sh = getShanghaiTimeParts();
+            const todayStr = `${sh.year}-${String(sh.month).padStart(2,'0')}-${String(sh.day).padStart(2,'0')}`;
+            // 防抖：未到目标时间不触发（修复 15:39 设置 15:40 却提前触发）
+            const targetMin = getReminderTargetMin(r);
+            const nowMin = sh.hour * 60 + sh.minute;
+            if (Number.isFinite(targetMin) && nowMin < targetMin) {
+                rescheduleReminder();
+                return;
+            }
+            const all = loadReminders();
+            const curr = all[selectedFund.code];
+            if (curr) {
+                curr.lastFiredDate = todayStr;
+                curr.lastFiredTime = r.time;
+                all[selectedFund.code] = curr;
+                saveReminders(all);
+            }
+
+            const prevLast = loadLastFiredReminder();
+            const prevItems0 = (prevLast && Array.isArray(prevLast.items))
+                ? prevLast.items
+                : (prevLast && prevLast.code && prevLast.time ? [{ code: prevLast.code, name: prevLast.name, time: prevLast.time }] : []);
+            const sameBucket = prevLast && prevLast.date === todayStr && prevLast.time === r.time;
+            const nextItems = (sameBucket ? prevItems0.slice() : []);
+            const idx = nextItems.findIndex(x => x && x.code === selectedFund.code);
+            const nextItem = { code: selectedFund.code, name: selectedFund.name || selectedFund.code, time: r.time };
+            if (idx >= 0) nextItems[idx] = nextItem; else nextItems.push(nextItem);
+            saveLastFiredReminder({ date: todayStr, time: r.time, items: nextItems });
+            updateLastFiredReminderHint();
+
+            const title = 'FundFlow 提醒';
+            const body = `${selectedFund.name || selectedFund.code}（${r.time}）请关注盘中变化`;
+            try {
+                if ('Notification' in window) {
+                    if (Notification.permission === 'granted') {
+                        new Notification(title, { body });
+                    } else if (Notification.permission !== 'denied') {
+                        const p = await Notification.requestPermission();
+                        if (p === 'granted') new Notification(title, { body });
+                    } else {
+                        // denied: do nothing
+                    }
+                }
+            } catch {
+                // ignore
+            }
+            const chip = document.getElementById('remindChip');
+            if (chip) {
+                chip.classList.add('alert');
+                chip.classList.add('ring');
+                chip.classList.remove('active');
+                chip.classList.remove('fired');
+                chip.textContent = `⏰ ${r.time}`;
+                setTimeout(() => {
+                    chip.classList.remove('alert');
+                    chip.classList.remove('ring');
+                    updateReminderBadge();
+                }, 60000);
+            }
+            showToast(body, 'error', 60000, true);
+            // 报警态下不更新 badge，避免立刻变成“已提醒”而看不到红色提示
+            rescheduleReminder();
         }
 
         // ============================================================
@@ -3132,7 +3492,42 @@
             clearInterval(refreshInterval);
             refreshInterval = null;
         }
-        function showToast(msg, type='success') { const t = document.createElement('div'); t.className=`toast ${type}`; t.innerText=msg; document.body.appendChild(t); setTimeout(()=>t.remove(), 3000); }
+        function showToast(msg, type='success', durationMs=3000, closable=false) {
+            let container = document.getElementById('toastContainer');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'toastContainer';
+                container.className = 'toast-container';
+                document.body.appendChild(container);
+            }
+            const t = document.createElement('div');
+            t.className = `toast ${type}`;
+            const row = document.createElement('div');
+            row.className = 'toast-row';
+            const m = document.createElement('div');
+            m.className = 'toast-msg';
+            m.textContent = msg;
+            row.appendChild(m);
+            let timer = null;
+            const remove = () => {
+                if (timer) clearTimeout(timer);
+                t.remove();
+                const c = document.getElementById('toastContainer');
+                if (c && c.children.length === 0) c.remove();
+            };
+            if (closable) {
+                const btn = document.createElement('button');
+                btn.className = 'toast-close';
+                btn.type = 'button';
+                btn.textContent = '×';
+                btn.onclick = remove;
+                row.appendChild(btn);
+            }
+            t.appendChild(row);
+            container.appendChild(t);
+            const d = Number(durationMs);
+            if (Number.isFinite(d) && d > 0) timer = setTimeout(remove, d);
+        }
 
         let _suggestTimer = null;
         let _suggestItems = [];
