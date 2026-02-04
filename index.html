@@ -131,9 +131,9 @@
         .stats-grid-wrapper { margin-top: 16px; }
         
         /* 日涨跌估算标记 */
-        .day-growth-source { font-size: 0.6875rem; font-weight: 600; padding: 2px 6px; border-radius: 4px; margin-left: 6px; }
-        .day-growth-source.est { background: rgba(139,92,246,0.1); color: #7c3aed; }
-        .day-growth-source.official { background: var(--gray-100); color: var(--gray-500); }
+        .day-growth-source { display: inline-flex; align-items: center; font-size: 0.6875rem; font-weight: 600; padding: 2px 6px; border-radius: 4px; margin-left: 6px; line-height: 1; border: 1px solid transparent; user-select: none; }
+        .day-growth-source.est { background: rgba(139,92,246,0.1); color: #7c3aed; border-color: rgba(139,92,246,0.22); }
+        .day-growth-source.official { background: var(--gray-100); color: var(--gray-500); border-color: var(--gray-200); }
         
         /* 添加基金区域折叠 */
         .add-fund-toggle { width: 100%; padding: 14px 24px; background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border: none; border-bottom: 1px solid rgba(229,229,229,0.6); cursor: pointer; display: flex; align-items: center; justify-content: space-between; transition: background 0.2s; }
@@ -223,7 +223,7 @@
         .sector-tag.positive { background: #fef2f2; border-color: #fee2e2; color: #dc2626; }
         .sector-tag.negative { background: #ecfdf5; border-color: #d1fae5; color: #059669; }
 
-        .prebuy-tag { position: relative; display: inline-flex; align-items: center; padding: 1px 6px; margin-left: 6px; border-radius: 999px; font-size: 0.65rem; font-weight: 700; line-height: 1.2; background: rgba(59, 130, 246, 0.10); border: 1px solid rgba(59, 130, 246, 0.22); color: var(--primary-dark); cursor: default; user-select: none; }
+        .prebuy-tag { position: relative; display: inline-flex; align-items: center; padding: 2px 6px; margin-left: 6px; border-radius: 4px; font-size: 0.6875rem; font-weight: 600; line-height: 1; background: rgba(59, 130, 246, 0.10); border: 1px solid rgba(59, 130, 246, 0.22); color: var(--primary-dark); cursor: default; user-select: none; }
         .prebuy-tag::before,
         .prebuy-tag::after { opacity: 0; visibility: hidden; pointer-events: none; transform: translate(-50%, -6px); transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s ease; }
         .prebuy-tag::after { content: attr(data-tooltip); position: absolute; left: 50%; bottom: calc(100% + 12px); width: max-content; max-width: min(360px, 70vw); white-space: normal; overflow-wrap: anywhere; word-break: break-word; padding: 10px 12px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; line-height: 1.35; color: rgba(255,255,255,0.95); background: rgba(17,24,39,0.92); box-shadow: 0 12px 34px rgba(0,0,0,0.18); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); z-index: 30; }
@@ -2625,8 +2625,12 @@
         function normalizeStockChg(chg, status) {
             const v = (typeof chg === 'number') ? chg : Number(chg);
             if (!Number.isFinite(v)) return 0;
-            // 休市/不开盘：涨跌幅没有意义，避免接口返回 -100 误导
-            if (status && status.canRealtimeUpdate === false) return 0;
+            // 盘前/周末：涨跌幅没有意义
+            // 盘后：仍应展示收盘涨跌幅（接口返回的是当日收盘口径），不要归零
+            if (status && status.canRealtimeUpdate === false) {
+                const reason = status.reason;
+                if (reason === '盘前' || reason === '周末休市') return 0;
+            }
             // 防御：东财部分场景会返回 -100 作为缺失值
             if (Math.abs(v) >= 99.99) return 0;
             return v;
