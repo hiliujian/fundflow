@@ -555,6 +555,7 @@
         let marketIndices = {};
         let selectedIndexKey = null;
         let indexCharts = {};
+        let indexTrendCache = {}; // { [indexKey]: { times: [], prices: [], preClose: number, updatedAt: number } }
         let refreshInterval = null;
         let refreshLock = Promise.resolve();
         let lastFundRefreshAt = 0;
@@ -776,6 +777,29 @@
                 }
             }
             grid.innerHTML = indexCards.join('');
+
+            // 若当前有选中的指数卡片（展开中），刷新 DOM 后需要恢复展开状态并重绘图表
+            if (selectedIndexKey) {
+                const card = document.getElementById(`indexCard_${selectedIndexKey}`);
+                const container = document.getElementById(`chartContainer_${selectedIndexKey}`);
+                if (card) card.classList.add('selected');
+                if (container) container.style.display = 'block';
+
+                // DOM 被重建后，旧 echarts 实例已绑定旧 DOM，需要释放并在新 DOM 上重绘
+                if (indexCharts[selectedIndexKey]) {
+                    try { indexCharts[selectedIndexKey].dispose(); } catch {}
+                    delete indexCharts[selectedIndexKey];
+                }
+
+                const cached = indexTrendCache[selectedIndexKey];
+                const fresh = cached && (Date.now() - (cached.updatedAt || 0) < 5 * 60 * 1000);
+                if (fresh) {
+                    drawIndexMiniChart(selectedIndexKey, cached);
+                } else {
+                    // 缓存不存在或过期：重新拉取一次（只对当前展开的指数执行）
+                    fetchAndDrawIndexKline(selectedIndexKey);
+                }
+            }
         }
         
         async function selectIndex(key) {
@@ -812,6 +836,60 @@
             if (!m) return true;
             const min = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
             return (min >= 570 && min <= 690) || (min >= 780 && min <= 900);
+        }
+
+        function drawIndexMiniChart(key, cached) {
+            const chartDom = document.getElementById(`indexChart_${key}`);
+            if (!chartDom) return;
+            const times = cached?.times || [];
+            const prices = cached?.prices || [];
+            const preClose = cached?.preClose;
+            if (!Array.isArray(times) || !Array.isArray(prices) || times.length === 0 || prices.length === 0 || !Number.isFinite(preClose)) {
+                chartDom.innerHTML = '<div style="text-align:center;color:var(--gray-500);padding:60px 0;font-size:0.75rem;">暂无数据</div>';
+                return;
+            }
+
+            const indexChart = echarts.init(chartDom);
+            indexCharts[key] = indexChart;
+            indexChart.setOption({
+                grid: { left: 30, right: 22, top: 10, bottom: 28, containLabel: true },
+                xAxis: {
+                    type: 'category', data: times, boundaryGap: true,
+                    axisLabel: {
+                        fontSize: 9,
+                        color: '#999',
+                        margin: 8,
+                        interval: (index) => {
+                            const total = times.length;
+                            if (total <= 6) return true;
+                            const step = Math.max(1, Math.floor(total / 4));
+                            if (index === 0 || index === total - 1) return true;
+                            return index % step === 0;
+                        },
+                        showMinLabel: true,
+                        showMaxLabel: true
+                    },
+                    axisLine: { lineStyle: { color: '#e5e5e5' } }, axisTick: { show: false }
+                },
+                yAxis: { type: 'value', scale: true, splitLine: { show: false }, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false } },
+                series: [{
+                    type: 'line', data: prices, smooth: true, symbol: 'none',
+                    lineStyle: { width: 1.5, color: prices[prices.length - 1] >= preClose ? '#dc2626' : '#059669' },
+                    areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: prices[prices.length - 1] >= preClose ? 'rgba(220, 38, 38, 0.1)' : 'rgba(5, 150, 105, 0.1)' }, { offset: 1, color: 'rgba(255, 255, 255, 0)' }]) }
+                }],
+                tooltip: {
+                    trigger: 'axis', confine: true,
+                    backgroundColor: 'rgba(255, 255, 255, 0.95)', borderColor: '#e5e5e5', textStyle: { fontSize: 10 },
+                    formatter: (params) => {
+                        const param = params[0];
+                        const change = ((param.data - preClose) / preClose * 100).toFixed(2);
+                        return `${param.name}<br/>${param.data.toFixed(2)} (${change >= 0 ? '+' : ''}${change}%)`;
+                    }
+                }
+            });
+
+            // 新建后主动 resize，避免容器刚显示出来时尺寸为 0 导致空白
+            try { indexChart.resize(); } catch {}
         }
 
         async function fetchAndDrawIndexKline(key) {
@@ -859,42 +937,9 @@
                 times.push(t);
                 prices.push(p);
             });
-            
-            const indexChart = echarts.init(chartDom);
-            indexCharts[key] = indexChart;
-            
-            indexChart.setOption({
-                grid: { left: 30, right: 22, top: 10, bottom: 28, containLabel: true },
-                xAxis: {
-                    type: 'category', data: times, boundaryGap: true,
-                    axisLabel: {
-                        fontSize: 9,
-                        color: '#999',
-                        margin: 8,
-                        interval: (index) => {
-                            const total = times.length;
-                            if (total <= 6) return true;
-                            const step = Math.max(1, Math.floor(total / 4));
-                            if (index === 0 || index === total - 1) return true;
-                            return index % step === 0;
-                        },
-                        showMinLabel: true,
-                        showMaxLabel: true
-                    },
-                    axisLine: { lineStyle: { color: '#e5e5e5' } }, axisTick: { show: false }
-                },
-                yAxis: { type: 'value', scale: true, splitLine: { show: false }, axisLabel: { show: false }, axisLine: { show: false }, axisTick: { show: false } },
-                series: [{
-                    type: 'line', data: prices, smooth: true, symbol: 'none',
-                    lineStyle: { width: 1.5, color: prices[prices.length - 1] >= preClose ? '#dc2626' : '#059669' },
-                    areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: prices[prices.length - 1] >= preClose ? 'rgba(220, 38, 38, 0.1)' : 'rgba(5, 150, 105, 0.1)' }, { offset: 1, color: 'rgba(255, 255, 255, 0)' }]) }
-                }],
-                tooltip: {
-                    trigger: 'axis', confine: true,
-                    backgroundColor: 'rgba(255, 255, 255, 0.95)', borderColor: '#e5e5e5', textStyle: { fontSize: 10 },
-                    formatter: (params) => { const param = params[0]; const change = ((param.data - preClose) / preClose * 100).toFixed(2); return `${param.name}<br/>${param.data.toFixed(2)} (${change >= 0 ? '+' : ''}${change}%)`; }
-                }
-            });
+
+            indexTrendCache[key] = { times, prices, preClose, updatedAt: Date.now() };
+            drawIndexMiniChart(key, indexTrendCache[key]);
         }
 
         // 移动端菜单控制
@@ -1369,7 +1414,7 @@
                 grid: { left: 0, right: 0, top: 5, bottom: 5 },
                 xAxis: { type: 'category', data: xData, show: false, boundaryGap: false },
                 yAxis: { type: 'value', show: false, scale: true },
-                series: [{ type: 'line', data: yData, smooth: true, symbol: 'none', lineStyle: { width: 2, color: isUp ? '#ef4444' : '#10b981' }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: isUp ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)' }, { offset: 1, color: 'rgba(255,255,255,0)' }]) } }]
+                series: [{ type: 'line', data: yData, smooth: true, symbol: 'none', connectNulls: true, lineStyle: { width: 2, color: isUp ? '#ef4444' : '#10b981' }, areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: isUp ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)' }, { offset: 1, color: 'rgba(255,255,255,0)' }]) } }]
             });
             window.addEventListener('resize', () => miniChart.resize());
         }
@@ -1378,7 +1423,7 @@
             const chartDom = document.getElementById(`miniChart_${fund.code}`);
             if (!chartDom) return;
             const status = getMarketStatus();
-            if (!status.canRealtimeUpdate) {
+            if (!status.canRealtimeUpdate && status.reason !== '午间休市') {
                 // 休市/不开盘：保持最后一帧，避免反复 setOption 导致闪跳
                 return;
             }
@@ -1397,6 +1442,7 @@
                 xAxis: { data: xData },
                 series: [{
                     data: yData,
+                    connectNulls: true,
                     lineStyle: { width: 2, color: isUp ? '#ef4444' : '#10b981' },
                     areaStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: isUp ? 'rgba(239, 68, 68, 0.3)' : 'rgba(16, 185, 129, 0.3)' }, { offset: 1, color: 'rgba(255,255,255,0)' }]) }
                 }]
@@ -1431,7 +1477,6 @@
             const stable = (Number.isFinite(baseValue) && baseValue > 0) ? baseValue : 1.5;
             const raw = Array.isArray(fund.realtimeHistory) ? fund.realtimeHistory : [];
             const out = new Array(242);
-            let last = stable;
             // 不要把“未来时间段”用 last 值硬填满，否则午休/盘前会看起来像画到了 15:00。
             // 未来部分用 null，让折线在最后一个已知点处自然停止。
             let firstKnown = -1;
@@ -1444,12 +1489,12 @@
             }
             for (let i = 0; i < 242; i++) {
                 const v = raw[i];
-                if (Number.isFinite(v)) last = v;
                 // 关键：首个已知点之前不要回填，避免把 10:30 的首条数据映射成 09:30-10:30
                 if (firstKnown >= 0 && i < firstKnown) {
                     out[i] = null;
                 } else {
-                    out[i] = (lastKnown >= 0 && i <= lastKnown) ? last : null;
+                    // 首个已知点之后：仅在接口实际返回该分钟时绘制，否则用 null 断线（不要用上一分钟值补齐）
+                    out[i] = (lastKnown >= 0 && i <= lastKnown && Number.isFinite(v)) ? v : null;
                 }
             }
             return out;
@@ -1551,8 +1596,18 @@
             if (gzDate !== todayStr) return null;
             const gzMin = parseInt(m[4]) * 60 + parseInt(m[5]);
             const nowMinRaw = sh.hour * 60 + sh.minute;
-            // 收盘后：用 15:00 作为“当前时间”封顶，避免延迟分钟数继续增长造成误解
-            const nowMin = Math.min(nowMinRaw, 900);
+
+            // 延迟显示口径：休市时不应把“非交易时间”算进延迟
+            // - 盘前：按 09:30 封顶
+            // - 午间休市：按 11:30 封顶
+            // - 盘后：按 15:00 封顶（盘后补全期除外）
+            const status = getMarketStatus();
+            let capMin = 900;
+            if (status.reason === '盘前') capMin = 570;
+            else if (status.reason === '午间休市') capMin = 690;
+            else if (status.reason === '盘后') capMin = 900;
+            else if (status.reason === '盘后补全') capMin = nowMinRaw;
+            const nowMin = Math.min(nowMinRaw, capMin);
             const gzMinCapped = Math.min(gzMin, 900);
             const d = nowMin - gzMinCapped;
             if (!Number.isFinite(d) || d < 0) return null;
@@ -1596,7 +1651,8 @@
                     ? ((Number.isFinite(gszNum0) && gszNum0 > 0) ? gszNum0 : dwjzNum0)
                     : dwjzNum0;
                 if (!Array.isArray(fund.realtimeHistory)) fund.realtimeHistory = [];
-                if (status.canRealtimeUpdate && acceptGz) {
+                const allowRealtimeWrite = (status.canRealtimeUpdate || status.reason === '午间休市' || status.reason === '盘后补全');
+                if (allowRealtimeWrite && acceptGz) {
                     const v0 = parseFloat(data.gsz);
                     const v = (Number.isFinite(v0) && v0 > 0) ? v0 : seed;
                     if (Number.isFinite(v) && v > 0) {
@@ -1616,7 +1672,7 @@
                 if (!options.suppressRender) renderFundList();
                 // 同步迷你图与主图（同一份 realtimeHistory）
                 // 休市/不开盘时不刷新迷你图，避免闪跳；但允许首次初始化
-                if (status.canRealtimeUpdate && acceptGz) {
+                if (allowRealtimeWrite && acceptGz) {
                     updateMiniChart(fund);
                 } else {
                     if (!miniCharts[fund.code]) initMiniChart(fund);
@@ -2527,7 +2583,7 @@
                 grid: { left: '3%', right: '4%', bottom: '20', top: '20', containLabel: true },
                 xAxis: { type: 'category', boundaryGap: false, axisLine: { lineStyle: { color: '#e5e5e5' } }, axisLabel: { color: '#737373' } },
                 yAxis: { type: 'value', scale: true, splitLine: { lineStyle: { color: '#f5f5f5' } }, axisLabel: { color: '#737373' } },
-                series: [{ name: '净值', type: 'line', smooth: true, symbol: 'none', lineStyle: { width: 3, color: '#3b82f6' }, areaStyle: { color: new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'rgba(59,130,246,0.3)'},{offset:1,color:'rgba(59,130,246,0.05)'}]) }, emphasis: { focus: 'series' } }]
+                series: [{ name: '净值', type: 'line', smooth: true, symbol: 'none', connectNulls: true, lineStyle: { width: 3, color: '#3b82f6' }, areaStyle: { color: new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'rgba(59,130,246,0.3)'},{offset:1,color:'rgba(59,130,246,0.05)'}]) }, emphasis: { focus: 'series' } }]
             });
             initTurningPointMagnet();
             window.addEventListener('resize', () => chart.resize());
@@ -2890,8 +2946,33 @@
             refreshInterval = setInterval(() => {
                 refreshLock = refreshLock.then(async () => {
                     const status = getMarketStatus();
-                    if (!status.canRealtimeUpdate) return;
                     const now = Date.now();
+
+                    // 休市期间：暂停所有轮询任务，除“需要补全”的估值源
+                    // - 交易中/盘后补全：照常刷新（估值/持仓/指数）
+                    // - 午间休市：仅低频刷新“选中基金”的估值，其他模块暂停
+                    // - 盘前/盘后/周末等：全部暂停
+                    if (!status.canRealtimeUpdate) {
+                        if (status.reason !== '午间休市') return;
+                        const minMiddayFundInterval = 15000;
+                        if (!selectedFund) return;
+                        // 午休补全：如果已经拿到 11:30（上午收盘）数据，就不再重复请求，等 13:00 后再恢复
+                        const sh = getShanghaiTimeParts();
+                        const todayStr = `${sh.year}-${String(sh.month).padStart(2,'0')}-${String(sh.day).padStart(2,'0')}`;
+                        const middayEndIdx = getRealtimeMinuteIndexFromGzTime(`${todayStr} 11:30`);
+                        const curIdx = getRealtimeMinuteIndexFromGzTime(selectedFund.estimatedTime);
+                        if (middayEndIdx >= 0 && curIdx >= middayEndIdx) return;
+                        if (now - lastFundRefreshAt < minMiddayFundInterval) return;
+                        lastFundRefreshAt = now;
+                        await fetchFundData(selectedFund, { suppressRender: true });
+                        renderFundList();
+                        updateMainDisplay(selectedFund);
+                        if (currentTimeRange === 'realtime') updateRealtimeChart();
+                        return;
+                    }
+
+                    const minFundInterval = 2900;
+                    const minIndicesInterval = 2900;
 
                     // 全局限流：每秒最多一次“网络任务”，用轮询调度保证各模块都能更新
                     // tick%4:
@@ -2900,7 +2981,7 @@
                     //   3:   刷新指数
                     refreshTick = (refreshTick + 1) % 4;
 
-                    if ((refreshTick === 0 || refreshTick === 1) && funds.length > 0 && now - lastFundRefreshAt >= 2900) {
+                    if ((refreshTick === 0 || refreshTick === 1) && funds.length > 0 && now - lastFundRefreshAt >= minFundInterval) {
                         lastFundRefreshAt = now;
                         fundRefreshCursor = fundRefreshCursor % funds.length;
                         const f = funds[fundRefreshCursor];
@@ -2921,7 +3002,7 @@
                         return;
                     }
 
-                    if (refreshTick === 3 && now - lastIndicesRefreshAt >= 2900) {
+                    if (refreshTick === 3 && now - lastIndicesRefreshAt >= minIndicesInterval) {
                         lastIndicesRefreshAt = now;
                         await fetchMarketIndices();
                         return;
