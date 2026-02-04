@@ -210,6 +210,16 @@
         .sector-tag.top10-weight { background: rgba(59, 130, 246, 0.08); border-color: rgba(59, 130, 246, 0.22); color: var(--primary-dark); }
         .sector-tag.positive { background: #fef2f2; border-color: #fee2e2; color: #dc2626; }
         .sector-tag.negative { background: #ecfdf5; border-color: #d1fae5; color: #059669; }
+
+        .prebuy-tag { position: relative; display: inline-flex; align-items: center; padding: 1px 6px; margin-left: 6px; border-radius: 999px; font-size: 0.65rem; font-weight: 700; line-height: 1.2; background: rgba(59, 130, 246, 0.10); border: 1px solid rgba(59, 130, 246, 0.22); color: var(--primary-dark); cursor: default; user-select: none; }
+        .prebuy-tag::before,
+        .prebuy-tag::after { opacity: 0; visibility: hidden; pointer-events: none; transform: translate(-50%, -6px); transition: opacity 0.16s ease, transform 0.16s ease, visibility 0.16s ease; }
+        .prebuy-tag::after { content: attr(data-tooltip); position: absolute; left: 50%; bottom: calc(100% + 12px); width: max-content; max-width: min(360px, 70vw); white-space: normal; overflow-wrap: anywhere; word-break: break-word; padding: 10px 12px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; line-height: 1.35; color: rgba(255,255,255,0.95); background: rgba(17,24,39,0.92); box-shadow: 0 12px 34px rgba(0,0,0,0.18); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); z-index: 30; }
+        .prebuy-tag::before { content: ''; position: absolute; left: 50%; bottom: calc(100% + 6px); width: 12px; height: 12px; background: rgba(17,24,39,0.92); transform: translate(-50%, -6px) rotate(45deg); border-radius: 3px; box-shadow: 0 8px 18px rgba(0,0,0,0.12); z-index: 29; }
+        .prebuy-tag:hover::before,
+        .prebuy-tag:hover::after,
+        .prebuy-tag:focus-visible::before,
+        .prebuy-tag:focus-visible::after { opacity: 1; visibility: visible; transform: translate(-50%, 0); }
         .side-scroll { flex: 1; overflow-y: auto; padding-right: 4px; }
         .side-scroll::-webkit-scrollbar { width: 4px; }
         .side-scroll::-webkit-scrollbar-thumb { background: var(--gray-300); border-radius: 10px; }
@@ -675,6 +685,18 @@
             const grid = document.getElementById('indicesGrid');
             if (!grid) return;
 
+            const nowTs = Date.now();
+            const trendTasks = [];
+            for (const [k, cfg] of Object.entries(MARKET_INDICES)) {
+                if (cfg.type !== 'cn') continue;
+                const cached = indexTrendCache[k];
+                const fresh = cached && (nowTs - (cached.updatedAt || 0) < 20000);
+                if (!fresh) trendTasks.push(fetchIndexTrendSnapshot(k, cfg));
+            }
+            if (trendTasks.length > 0) {
+                await Promise.allSettled(trendTasks);
+            }
+
             const indexSources = [
                 {
                     name: 'eastmoney_api',
@@ -704,7 +726,8 @@
                 }
 
                 if (data) {
-                    const price = data.f43 || data.f60;
+                    const price = (data.f43 !== undefined && data.f43 !== null && data.f43 !== '-') ? data.f43 : data.f60;
+                    const priceNum = Number(price);
                     const isCn = config.type === 'cn';
                     let isClosed = false;
                     if (isCn) {
@@ -717,36 +740,61 @@
                     }
 
                     let changePct = 0;
+                    const f3Num = (data.f3 !== undefined && data.f3 !== null && data.f3 !== '-') ? parseFloat(data.f3) : NaN;
+                    const f170Num = (data.f170 !== undefined && data.f170 !== null && data.f170 !== '-') ? Number(data.f170) : NaN;
+                    const closeRawNum = Number(data.f43);
+                    const preCloseRawNum = Number(data.f60);
+                    const closeForPctNum = Number.isFinite(closeRawNum) ? closeRawNum : priceNum;
                     // A股在休市时：用最近收盘口径（收盘价 vs 昨收）
                     if (isCn && isClosed) {
-                        const closeRaw = data.f43;
-                        const preCloseRaw = data.f60;
-                        if (Number.isFinite(closeRaw) && Number.isFinite(preCloseRaw) && preCloseRaw !== 0) {
-                            changePct = (closeRaw - preCloseRaw) / preCloseRaw * 100;
-                        } else if (data.f170 && price) {
-                            const preClose = price - data.f170;
-                            if (preClose) changePct = (data.f170 / preClose) * 100;
-                        } else if (data.f3 !== undefined && data.f3 !== null && data.f3 !== '-') {
-                            changePct = data.f3;
+                        if (Number.isFinite(closeForPctNum) && Number.isFinite(preCloseRawNum) && preCloseRawNum !== 0) {
+                            changePct = (closeForPctNum - preCloseRawNum) / preCloseRawNum * 100;
+                        } else if (Number.isFinite(f170Num) && Number.isFinite(priceNum)) {
+                            const preClose = priceNum - f170Num;
+                            if (preClose) changePct = (f170Num / preClose) * 100;
+                        } else if (Number.isFinite(f3Num)) {
+                            changePct = f3Num;
                         }
                     } else {
                         // 交易中（或非A股指数）：优先用接口实时涨跌幅
-                        if (data.f3 !== undefined && data.f3 !== null && data.f3 !== '-') {
-                            changePct = data.f3;
-                        } else if (data.f170 && price) {
-                            const preClose = price - data.f170;
-                            if (preClose) changePct = (data.f170 / preClose) * 100;
+                        if (Number.isFinite(f3Num)) {
+                            changePct = f3Num;
+                        } else if (Number.isFinite(f170Num) && Number.isFinite(priceNum)) {
+                            const preClose = priceNum - f170Num;
+                            if (preClose) changePct = (f170Num / preClose) * 100;
                         }
+                    }
+
+                    // 兜底：部分指数在交易中 f3/f170 可能缺失或返回 0，但 f43/f60 是可靠的（现价/昨收）
+                    if ((!Number.isFinite(changePct) || Math.abs(changePct) < 1e-9) && Number.isFinite(closeForPctNum) && Number.isFinite(preCloseRawNum) && preCloseRawNum !== 0) {
+                        changePct = (closeForPctNum - preCloseRawNum) / preCloseRawNum * 100;
                     }
                     const updateTime = data.f86 || '--';
                     const isPositive = changePct >= 0;
-                    const finalPrice = price > 10000 && config.type === 'cn' ? (price/100).toFixed(2) : (price/100).toFixed(2);
-                    const formattedChange = (changePct !== undefined) ? (isPositive ? '+' : '') + parseFloat(changePct).toFixed(2) + '%' : '--';
+                    let finalPrice = price > 10000 && config.type === 'cn' ? (price/100).toFixed(2) : (price/100).toFixed(2);
+                    let formattedChange = (changePct !== undefined) ? (isPositive ? '+' : '') + parseFloat(changePct).toFixed(2) + '%' : '--';
                     
                     let timeStr = '--';
                     if (updateTime && updateTime !== '--') {
                         const d = new Date(updateTime * 1000);
                         timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+                    }
+
+                    // 如果该指数已经展开过并拉取了 trends2/get，则用走势缓存覆盖卡片价格与涨跌幅，确保与图对齐
+                    {
+                        const cached = indexTrendCache[key];
+                        const fresh = cached && (nowTs - (cached.updatedAt || 0) < 2 * 60 * 1000);
+                        const lastPrice = fresh ? cached.prices?.[cached.prices.length - 1] : NaN;
+                        const preClose = fresh ? cached.preClose : NaN;
+                        const pct = (fresh && Number.isFinite(lastPrice) && Number.isFinite(preClose) && preClose !== 0) ? ((lastPrice - preClose) / preClose * 100) : NaN;
+                        if (fresh && Number.isFinite(lastPrice)) {
+                            finalPrice = lastPrice.toFixed(2);
+                            if (Number.isFinite(pct)) {
+                                changePct = pct;
+                                formattedChange = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+                            }
+                            if (Array.isArray(cached.times) && cached.times.length > 0) timeStr = cached.times[cached.times.length - 1] || timeStr;
+                        }
                     }
                     
                     marketIndices[key] = { price: finalPrice, change: changePct, changePct: formattedChange, time: timeStr, secid: config.secid, name: config.name };
@@ -838,6 +886,31 @@
             return (min >= 570 && min <= 690) || (min >= 780 && min <= 900);
         }
 
+        async function fetchIndexTrendSnapshot(key, config) {
+            try {
+                const url = `https://push2.eastmoney.com/api/qt/stock/trends2/get?secid=${config.secid}&fields1=f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13&fields2=f51,f53&_=${Date.now()}`;
+                const result = await runWithSourceStat('index_trends2_jsonp', async () => await fetchJsonp(url, 'cb', 12000));
+                const d = result?.data;
+                const trends = d?.trends;
+                const preClose = Number(d?.preClose);
+                if (!Array.isArray(trends) || trends.length === 0 || !Number.isFinite(preClose)) return;
+                const times = [];
+                const prices = [];
+                for (const item of trends) {
+                    const parts = String(item).split(',');
+                    const t = parseTrendTime(parts[0]);
+                    if (config.type === 'cn' && !isAshareTradingTimeLabel(t)) continue;
+                    const p = parseFloat(parts[1]);
+                    if (!Number.isFinite(p)) continue;
+                    times.push(t);
+                    prices.push(p);
+                }
+                if (times.length === 0 || prices.length === 0) return;
+                indexTrendCache[key] = { times, prices, preClose, updatedAt: Date.now() };
+            } catch {
+            }
+        }
+
         function drawIndexMiniChart(key, cached) {
             const chartDom = document.getElementById(`indexChart_${key}`);
             if (!chartDom) return;
@@ -847,6 +920,27 @@
             if (!Array.isArray(times) || !Array.isArray(prices) || times.length === 0 || prices.length === 0 || !Number.isFinite(preClose)) {
                 chartDom.innerHTML = '<div style="text-align:center;color:var(--gray-500);padding:60px 0;font-size:0.75rem;">暂无数据</div>';
                 return;
+            }
+
+            // 用走势数据回填卡片显示（使卡片涨跌幅与图中最新点对齐）
+            {
+                const lastPrice = prices[prices.length - 1];
+                const pct = (Number.isFinite(lastPrice) && Number.isFinite(preClose) && preClose !== 0) ? ((lastPrice - preClose) / preClose * 100) : NaN;
+                const card = document.getElementById(`indexCard_${key}`);
+                if (card && Number.isFinite(lastPrice)) {
+                    const valueEl = card.querySelector('.index-value');
+                    if (valueEl) valueEl.textContent = lastPrice.toFixed(2);
+                    const changeEl = card.querySelector('.index-change');
+                    if (changeEl && Number.isFinite(pct)) changeEl.textContent = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+                }
+                if (marketIndices[key]) {
+                    if (Number.isFinite(lastPrice)) marketIndices[key].price = lastPrice.toFixed(2);
+                    if (Number.isFinite(pct)) {
+                        marketIndices[key].change = pct;
+                        marketIndices[key].changePct = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+                    }
+                    if (times.length > 0) marketIndices[key].time = times[times.length - 1] || marketIndices[key].time;
+                }
             }
 
             const indexChart = echarts.init(chartDom);
@@ -1775,7 +1869,22 @@
                 document.getElementById('totalProfit').textContent = '--';
                 document.getElementById('totalProfit').className = 'stat-value';
                 const ppEl = document.getElementById('profitPercent');
-                ppEl.textContent = '未设置持仓';
+                const buy = getFundBuyInfo(fund);
+                if (buy.amount && buy.date) {
+                    const buyPoint = getFirstHistoryPointOnOrAfter(fund.code, buy.date);
+                    const effDate = buyPoint?.date;
+                    const detail = effDate ? `${buy.date} 买入，预计 ${effDate} 生效` : `${buy.date} 买入，待净值披露后生效`;
+                    ppEl.textContent = '';
+                    ppEl.appendChild(document.createTextNode(`持仓金额 ¥${buy.amount.toFixed(2)}`));
+                    const tag = document.createElement('span');
+                    tag.className = 'prebuy-tag';
+                    tag.textContent = '预买入';
+                    tag.setAttribute('data-tooltip', detail);
+                    tag.setAttribute('tabindex', '0');
+                    ppEl.appendChild(tag);
+                } else {
+                    ppEl.textContent = '未设置持仓';
+                }
                 ppEl.className = 'stat-change';
                 ppEl.style.color = '#000';
             }
