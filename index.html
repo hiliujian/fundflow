@@ -2087,12 +2087,23 @@
             window.open(url, '_blank', 'noopener,noreferrer');
         }
 
+        function normalizeStockChg(chg, status) {
+            const v = (typeof chg === 'number') ? chg : Number(chg);
+            if (!Number.isFinite(v)) return 0;
+            // 休市/不开盘：涨跌幅没有意义，避免接口返回 -100 误导
+            if (status && status.canRealtimeUpdate === false) return 0;
+            // 防御：东财部分场景会返回 -100 作为缺失值
+            if (Math.abs(v) >= 99.99) return 0;
+            return v;
+        }
+
         // ============================================================
         // 持仓加载 - 含 gushitong.baidu.com 新数据源（优先级最高）
         // ============================================================
         async function loadHoldingsAndSectors(fund, options = {}) {
             const tbody = document.getElementById('holdingsTableBody');
             const tags = document.getElementById('sectorTags');
+            const status0 = getMarketStatus();
 
             // updateOnly: 只更新涨跌幅，不要重绘 DOM（避免闪跳）
             if (options.updateOnly) {
@@ -2310,6 +2321,7 @@
                                     chg = 0;
                                 }
                             }
+                            chg = normalizeStockChg(chg, status0);
                             return { ...h, chg, price: Number.isFinite(last) ? last : 0, industry: d.f100 || '其他' };
                         }
                     } catch (err) { continue; }
@@ -2422,6 +2434,8 @@
             const list = Array.isArray(fund?._topHoldings) ? fund._topHoldings : [];
             if (list.length === 0) return;
 
+            const status0 = getMarketStatus();
+
             // 批量行情：一次请求拿到 TOP10 全部股票涨跌幅，避免 1 秒内多次请求
             const secids = list.map(h => getEastmoneySecId(h.code)).filter(Boolean).join(',');
             if (!secids) return;
@@ -2446,7 +2460,7 @@
 
             const quotes = list.map(h => ({
                 code: h.code,
-                chg: Number.isFinite(chgMap[h.code]) ? chgMap[h.code] : 0
+                chg: normalizeStockChg(Number.isFinite(chgMap[h.code]) ? chgMap[h.code] : 0, status0)
             }));
 
             quotes.forEach(q => {
@@ -2464,7 +2478,7 @@
             let top10Contribution = 0;
             list.forEach(h => {
                 const w = parseFloat(h.ratio) || 0;
-                const c = Number.isFinite(chgMap[h.code]) ? chgMap[h.code] : 0;
+                const c = normalizeStockChg(Number.isFinite(chgMap[h.code]) ? chgMap[h.code] : 0, status0);
                 top10Contribution += (w / 100) * c;
             });
 
