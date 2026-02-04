@@ -1566,6 +1566,16 @@
                 fund.currentNav = data.dwjz;
                 // 统一口径：fund.dayGrowth 代表“估算日涨跌幅”（交易中），来源可能是 fundgz 或持仓估算
                 // 防回退：如果接口返回了更早的 gztime（旧数据），不要覆盖最新显示与曲线
+                const sh0 = getShanghaiTimeParts();
+                const todayStr0 = `${sh0.year}-${String(sh0.month).padStart(2,'0')}-${String(sh0.day).padStart(2,'0')}`;
+                const gzDateStr = getDateStr(data.gztime);
+                // 新交易日/跨天：重置 last idx，避免昨天的 idx=241 导致今天早盘 acceptGz 永远为 false
+                if (gzDateStr && gzDateStr !== (fund._lastGzDate || '')) {
+                    fund._lastGzDate = gzDateStr;
+                    if (gzDateStr === todayStr0) {
+                        fund._lastGzIdx = -1;
+                    }
+                }
                 const gzIdx = getRealtimeMinuteIndexFromGzTime(data.gztime);
                 const lastIdx = Number.isFinite(fund._lastGzIdx) ? fund._lastGzIdx : -1;
                 const acceptGz = (gzIdx < 0) ? true : (gzIdx >= lastIdx);
