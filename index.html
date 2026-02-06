@@ -753,9 +753,13 @@
                         const s = getMarketStatus();
                         isClosed = !s.isOpen;
                     } else {
-                        const today = new Date();
-                        const day = today.getDay();
-                        if (day === 0 || day === 6) isClosed = true;
+                        if (config.type === 'us') {
+                            isClosed = !isUsMarketOpenNow();
+                        } else {
+                            const today = new Date();
+                            const day = today.getDay();
+                            if (day === 0 || day === 6) isClosed = true;
+                        }
                     }
 
                     let changePct = 0;
@@ -823,7 +827,7 @@
                              onclick="selectIndex('${key}')" id="indexCard_${key}">
                             <div class="index-header">
                                 <div class="index-name"><span class="index-flag">${config.flag}</span>${config.name}</div>
-                                <span class="index-status-badge">休市</span>
+                                <span class="index-status-badge">${isClosed ? '休市' : '交易中'}</span>
                             </div>
                             <div class="index-body">
                                 <div class="index-value">${finalPrice}</div>
@@ -1681,6 +1685,23 @@
             const map = {}; parts.forEach(p => map[p.type] = p.value);
             const dow = new Date(Date.UTC(map.year, map.month - 1, map.day)).getUTCDay();
             return { year: parseInt(map.year), month: parseInt(map.month), day: parseInt(map.day), hour: parseInt(map.hour), minute: parseInt(map.minute), second: parseInt(map.second), dow };
+        }
+
+        function getNewYorkTimeParts() {
+            const now = new Date();
+            const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(now);
+            const map = {}; parts.forEach(p => map[p.type] = p.value);
+            const dow = new Date(Date.UTC(map.year, map.month - 1, map.day)).getUTCDay();
+            return { year: parseInt(map.year), month: parseInt(map.month), day: parseInt(map.day), hour: parseInt(map.hour), minute: parseInt(map.minute), second: parseInt(map.second), dow };
+        }
+
+        function isUsMarketOpenNow() {
+            const ny = getNewYorkTimeParts();
+            // 周一~周五
+            if (ny.dow === 0 || ny.dow === 6) return false;
+            const min = ny.hour * 60 + ny.minute;
+            // 美股常规交易时段：09:30-16:00（纽约时间，自动处理夏令时）
+            return min >= 9 * 60 + 30 && min <= 16 * 60;
         }
 
         function formatLastGzTimeForAshare(gztime) {
