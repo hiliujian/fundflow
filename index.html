@@ -149,7 +149,7 @@
         /* 持仓编辑对话框 */
         .pos-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); backdrop-filter: blur(4px); z-index: 20000; display: none; align-items: center; justify-content: center; }
         .pos-modal-overlay.active { display: flex; }
-        .pos-modal { background: white; border-radius: 20px; width: 360px; max-width: 92vw; box-shadow: 0 24px 60px rgba(0,0,0,0.22); overflow: hidden; animation: posModalIn 0.22s cubic-bezier(.4,0,.2,1); }
+        .pos-modal { background: white; border-radius: 20px; width: 392px; max-width: 92vw; box-shadow: 0 24px 60px rgba(0,0,0,0.22); overflow: hidden; animation: posModalIn 0.22s cubic-bezier(.4,0,.2,1); }
         @keyframes posModalIn { from { transform: translateY(24px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         .pos-modal-header { padding: 22px 24px 16px; display: flex; justify-content: space-between; align-items: center; }
         .pos-modal-title { font-size: 1.0625rem; font-weight: 800; color: var(--gray-900); }
@@ -189,6 +189,12 @@
         .pos-buy-item-amt { font-size: 0.875rem; font-weight: 900; color: var(--gray-900); font-family: 'JetBrains Mono', monospace; }
         .pos-buy-item-del { width: 28px; height: 28px; border: none; background: white; border: 1px solid var(--gray-200); border-radius: 10px; cursor: pointer; color: var(--gray-500); font-size: 1rem; line-height: 1; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
         .pos-buy-item-del:hover { background: #fef2f2; border-color: #fecaca; color: #dc2626; }
+        .pos-action-seg { display: flex; gap: 0; border: 2px solid var(--gray-200); border-radius: 12px; overflow: hidden; background: var(--gray-50); }
+        .pos-action-btn { flex: 1; border: none; background: transparent; padding: 10px 10px; cursor: pointer; font-size: 0.875rem; font-weight: 900; color: var(--gray-700); transition: all 0.15s; }
+        .pos-action-btn.active { background: white; color: var(--gray-900); box-shadow: 0 6px 18px rgba(0,0,0,0.08); }
+        .pos-action-btn.buy.active { border-right: 1px solid var(--gray-200); }
+        .pos-action-btn.sell.active { border-left: 1px solid var(--gray-200); }
+        .pos-action-btn:hover { background: rgba(255,255,255,0.9); }
         .pos-modal-footer { padding: 16px 24px 22px; display: flex; gap: 10px; justify-content: flex-end; }
         .pos-btn-cancel { padding: 9px 20px; border: 2px solid var(--gray-200); border-radius: 10px; background: white; font-size: 0.875rem; font-weight: 700; color: var(--gray-700); cursor: pointer; transition: all 0.15s; }
         .pos-btn-cancel:hover { border-color: var(--gray-300); background: var(--gray-50); }
@@ -416,11 +422,19 @@
                     <input type="text" id="posCode" disabled>
                 </div>
                 <div class="pos-field">
-                    <label>买入金额</label>
+                    <label>操作类型</label>
+                    <input type="hidden" id="posAction" value="buy">
+                    <div class="pos-action-seg" role="tablist" aria-label="交易类型">
+                        <button class="pos-action-btn buy active" id="posActionBuy" type="button" onclick="setPosAction('buy')">买入 / 加仓</button>
+                        <button class="pos-action-btn sell" id="posActionSell" type="button" onclick="setPosAction('sell')">卖出 / 减仓</button>
+                    </div>
+                </div>
+                <div class="pos-field">
+                    <label id="posAmountLabel">买入金额</label>
                     <input type="number" id="posAmount" placeholder="如 10000" step="0.01">
                 </div>
                 <div class="pos-field">
-                    <label>买入时间</label>
+                    <label id="posDateLabel">买入时间</label>
                     <input type="date" id="posBuyDate">
                 </div>
                 <div class="pos-quick-label">快速操作</div>
@@ -441,6 +455,17 @@
                         </div>
                     </div>
                     <div class="pos-buy-history-list" id="posBuyHistoryList"></div>
+                </div>
+
+                <div class="pos-buy-history" id="posSellHistory">
+                    <div class="pos-buy-history-header">
+                        <div class="pos-buy-history-title">卖出历史</div>
+                        <div class="pos-buy-history-actions">
+                            <div class="pos-buy-history-total" id="posSellHistoryTotal">--</div>
+                            <button class="pos-buy-history-btn danger" onclick="clearPosSells()">清空</button>
+                        </div>
+                    </div>
+                    <div class="pos-buy-history-list" id="posSellHistoryList"></div>
                 </div>
             </div>
             <div class="pos-modal-footer">
@@ -643,12 +668,33 @@
             _posEditCode = code;
             document.getElementById('posModalTitle').textContent = `编辑持仓 — ${fund.name || code}`;
             document.getElementById('posCode').value = code;
+            setPosAction('buy');
             document.getElementById('posAmount').value = '';
             document.getElementById('posBuyDate').value = '';
             renderPosBuyHistory(fund);
+            renderPosSellHistory(fund);
             document.getElementById('posModalOverlay').classList.add('active');
             // 短延迟后 focus 金额输入框
             setTimeout(() => document.getElementById('posAmount').focus(), 120);
+        }
+
+        function setPosAction(action) {
+            const v = (action === 'sell') ? 'sell' : 'buy';
+            const input = document.getElementById('posAction');
+            if (input) input.value = v;
+            const buyBtn = document.getElementById('posActionBuy');
+            const sellBtn = document.getElementById('posActionSell');
+            if (buyBtn) buyBtn.classList.toggle('active', v === 'buy');
+            if (sellBtn) sellBtn.classList.toggle('active', v === 'sell');
+            const amountLabel = document.getElementById('posAmountLabel');
+            const dateLabel = document.getElementById('posDateLabel');
+            if (amountLabel) amountLabel.textContent = (v === 'sell') ? '卖出金额' : '买入金额';
+            if (dateLabel) dateLabel.textContent = (v === 'sell') ? '卖出时间' : '买入时间';
+
+            const buyHist = document.getElementById('posBuyHistory');
+            const sellHist = document.getElementById('posSellHistory');
+            if (buyHist) buyHist.style.display = (v === 'buy') ? '' : 'none';
+            if (sellHist) sellHist.style.display = (v === 'sell') ? '' : 'none';
         }
 
         function closePosModal() {
@@ -669,14 +715,43 @@
             let amount = amountVal !== '' ? parseFloat(amountVal) : NaN;
             const date = buyDateVal !== '' ? buyDateVal : '';
             if (!Number.isFinite(amount)) amount = NaN;
+            const action = (document.getElementById('posAction')?.value || 'buy');
 
-            // 清仓：金额 <= 0 或空，清空 buys
-            if (!Number.isFinite(amount) || amount <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-                fund.buys = [];
-                fund.buyAmount = null;
-                fund.buyDate = null;
+            // 未输入直接保存：不做任何修改
+            if (amountVal === '' && date === '') {
+                closePosModal();
+                return;
+            }
+
+            // 金额>0但日期不合法：不允许保存（买入/卖出都一样）
+            if (Number.isFinite(amount) && amount > 0 && !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+                showToast('请输入正确的日期', 'error');
+                return;
+            }
+
+            if (action === 'sell') {
+                // 清仓：金额 <= 0 或空 => 记录“卖出全部”
+                if (!Array.isArray(fund.sells)) fund.sells = [];
+                if (!Number.isFinite(amount) || amount <= 0) {
+                    const sh = getShanghaiTimeParts();
+                    const todayStr = `${sh.year}-${String(sh.month).padStart(2,'0')}-${String(sh.day).padStart(2,'0')}`;
+                    if (!fund.sells.some(x => x && x.all === true && x.date === todayStr)) fund.sells.push({ date: todayStr, all: true });
+                } else {
+                    const idx = fund.sells.findIndex(x => x && x.date === date && x.all !== true);
+                    if (idx >= 0) {
+                        const prevAmt = Number(fund.sells[idx].amount);
+                        fund.sells[idx].amount = (Number.isFinite(prevAmt) ? prevAmt : 0) + amount;
+                    } else {
+                        fund.sells.push({ amount, date, all: false });
+                    }
+                }
             } else {
+                // 买入
                 if (!Array.isArray(fund.buys)) fund.buys = [];
+                if (!Number.isFinite(amount) || amount <= 0) {
+                    showToast('请输入正确的买入金额', 'error');
+                    return;
+                }
                 const idx = fund.buys.findIndex(x => x && x.date === date);
                 if (idx >= 0) {
                     const prevAmt = Number(fund.buys[idx].amount);
@@ -727,6 +802,38 @@
             }).join('');
         }
 
+        function renderPosSellHistory(fund) {
+            const wrap = document.getElementById('posSellHistory');
+            const list = document.getElementById('posSellHistoryList');
+            const totalEl = document.getElementById('posSellHistoryTotal');
+            if (!wrap || !list || !totalEl) return;
+            const sells = getFundSells(fund);
+            const total = sells.reduce((s, x) => s + (x && !x.all ? (Number(x.amount) || 0) : 0), 0);
+            totalEl.textContent = `合计 ¥${total.toFixed(2)}`;
+            if (!sells.length) {
+                list.innerHTML = `<div style="text-align:center;color:var(--gray-500);font-size:0.8125rem;padding:10px 0;font-weight:700;">暂无卖出记录</div>`;
+                return;
+            }
+            list.innerHTML = sells.map(s => {
+                const eff = getFirstHistoryPointOnOrAfter(fund.code, s.date)?.date;
+                const sub = eff ? `预计 ${eff} 生效` : '待净值披露后生效';
+                const key = s.all ? `${s.date}|ALL` : `${s.date}|${Number(s.amount).toFixed(2)}`;
+                const amtText = s.all ? '清仓' : `¥${Number(s.amount).toFixed(2)}`;
+                return `
+                    <div class="pos-buy-item">
+                        <div class="pos-buy-item-left">
+                            <div class="pos-buy-item-date">${s.date}</div>
+                            <div class="pos-buy-item-sub">${sub}</div>
+                        </div>
+                        <div class="pos-buy-item-right">
+                            <div class="pos-buy-item-amt">${amtText}</div>
+                            <button class="pos-buy-item-del" onclick="removePosSellEntry('${fund.code}','${key}')" title="删除">×</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
         function removePosBuyEntry(code, key) {
             const fund = funds.find(f => f.code === code);
             if (!fund) return;
@@ -754,6 +861,30 @@
             showToast('已删除一笔买入记录');
         }
 
+        function removePosSellEntry(code, key) {
+            const fund = funds.find(f => f.code === code);
+            if (!fund) return;
+            const [date, val] = (key || '').split('|');
+            let changed = false;
+            if (Array.isArray(fund.sells)) {
+                const before = fund.sells.length;
+                if (val === 'ALL') {
+                    fund.sells = fund.sells.filter(s => !(s && s.date === date && s.all === true));
+                } else {
+                    const amt = Number(val);
+                    fund.sells = fund.sells.filter(s => !(s && s.date === date && !s.all && Number(Number(s.amount).toFixed(2)) === Number(amt.toFixed(2))));
+                }
+                if (fund.sells.length !== before) changed = true;
+            }
+            if (!changed) return;
+            saveFunds();
+            renderPosSellHistory(fund);
+            renderFundList();
+            if (historyTableState?.code === fund.code) resetHistoryTable(fund.code);
+            if (selectedFund?.code === fund.code) updateMainDisplay(fund);
+            showToast('已删除一笔卖出记录');
+        }
+
         function clearPosBuys() {
             if (!_posEditCode) return;
             const fund = funds.find(f => f.code === _posEditCode);
@@ -771,11 +902,30 @@
             showToast('已清空买入历史');
         }
 
+        function clearPosSells() {
+            if (!_posEditCode) return;
+            const fund = funds.find(f => f.code === _posEditCode);
+            if (!fund) return;
+            const sells = getFundSells(fund);
+            if (!sells.length) return;
+            fund.sells = [];
+            // clears 仅作兼容读取，不清理也会继续显示；这里同步清掉避免重复展示
+            fund.clears = [];
+            saveFunds();
+            renderPosSellHistory(fund);
+            renderFundList();
+            if (historyTableState?.code === fund.code) resetHistoryTable(fund.code);
+            if (selectedFund?.code === fund.code) updateMainDisplay(fund);
+            showToast('已清空卖出历史');
+        }
+
         function posQuickAction(action) {
             const amountInput = document.getElementById('posAmount');
             const current = parseFloat(amountInput.value) || 0;
             switch (action) {
                 case 'clear':
+                    // 清仓属于卖出
+                    setPosAction('sell');
                     amountInput.value = '0';
                     break;
                 case 'half':
@@ -2618,6 +2768,32 @@
             return out;
         }
 
+        function getFundSells(fund) {
+            const out = [];
+            if (Array.isArray(fund?.sells)) {
+                for (const s of fund.sells) {
+                    const date = (s?.date || '').toString();
+                    const all = !!s?.all;
+                    const amount = Number(s?.amount);
+                    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+                    if (all) {
+                        out.push({ date, all: true, amount: null });
+                    } else if (Number.isFinite(amount) && amount > 0) {
+                        out.push({ date, all: false, amount });
+                    }
+                }
+            }
+            // 兼容旧 clears（迁移为 sells all）
+            if (Array.isArray(fund?.clears)) {
+                for (const c of fund.clears) {
+                    const date = (c?.date || '').toString();
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) out.push({ date, all: true, amount: null });
+                }
+            }
+            out.sort((a, b) => (a.date < b.date ? -1 : (a.date > b.date ? 1 : 0)));
+            return out;
+        }
+
         function getFundBuyInfo(fund) {
             const buys = getFundBuys(fund);
             if (!buys.length) return { amount: null, date: null };
@@ -2656,23 +2832,56 @@
 
         function getPositionFromBuy(fund) {
             const buys = getFundBuys(fund);
-            if (!buys.length) return { has: false };
+            const sells = getFundSells(fund);
+            if (!buys.length && !sells.length) return { has: false };
+
+            const sh = getShanghaiTimeParts();
+            const todayStr = `${sh.year}-${String(sh.month).padStart(2,'0')}-${String(sh.day).padStart(2,'0')}`;
 
             let invested = 0;
             let shares = 0;
             const pending = [];
+
+            const txs = [];
             for (const b of buys) {
-                const buyPoint = getFirstHistoryPointOnOrAfter(fund.code, b.date);
-                const buyNav = buyPoint ? Number(buyPoint.y) : NaN;
-                if (!Number.isFinite(buyNav) || buyNav <= 0) {
-                    pending.push({ amount: b.amount, date: b.date, effDate: buyPoint?.date || null });
-                    continue;
-                }
-                const sh = b.amount / buyNav;
-                if (!Number.isFinite(sh) || sh <= 0) continue;
-                invested += b.amount;
-                shares += sh;
+                const bp = getFirstHistoryPointOnOrAfter(fund.code, b.date);
+                if (!bp || !bp.date) { pending.push({ amount: b.amount, date: b.date, effectiveDate: null }); continue; }
+                if (bp.date > todayStr) { pending.push({ amount: b.amount, date: b.date, effectiveDate: bp.date }); continue; }
+                const nav0 = Number(bp.y);
+                if (!Number.isFinite(nav0) || nav0 <= 0) { pending.push({ amount: b.amount, date: b.date, effectiveDate: bp.date }); continue; }
+                txs.push({ type: 'buy', effDate: bp.date, amount: b.amount, nav: nav0, inputDate: b.date });
             }
+            for (const s of sells) {
+                const bp = getFirstHistoryPointOnOrAfter(fund.code, s.date);
+                if (!bp || !bp.date) continue;
+                if (bp.date > todayStr) continue;
+                const nav0 = Number(bp.y);
+                if (!Number.isFinite(nav0) || nav0 <= 0) continue;
+                txs.push({ type: 'sell', effDate: bp.date, amount: s.amount, all: !!s.all, nav: nav0, inputDate: s.date });
+            }
+            txs.sort((a, b) => (a.effDate < b.effDate ? -1 : (a.effDate > b.effDate ? 1 : (a.type === b.type ? 0 : (a.type === 'buy' ? -1 : 1)))));
+
+            for (const tx of txs) {
+                if (tx.type === 'buy') {
+                    const sh0 = tx.amount / tx.nav;
+                    if (!Number.isFinite(sh0) || sh0 <= 0) continue;
+                    shares += sh0;
+                    invested += tx.amount;
+                } else {
+                    if (shares <= 0) continue;
+                    const avgCost = invested > 0 ? (invested / shares) : 0;
+                    let sellShares = 0;
+                    if (tx.all) sellShares = shares;
+                    else sellShares = tx.amount / tx.nav;
+                    if (!Number.isFinite(sellShares) || sellShares <= 0) continue;
+                    sellShares = Math.min(sellShares, shares);
+                    shares -= sellShares;
+                    invested -= avgCost * sellShares;
+                    if (shares <= 0.00000001) { shares = 0; invested = 0; }
+                    if (invested < 0) invested = 0;
+                }
+            }
+
             if (shares <= 0 || invested <= 0) return { has: false, pendingBuys: pending };
             return { has: true, invested, shares, pendingBuys: pending };
         }
@@ -3246,9 +3455,13 @@
         let _turningPointLabels = [];
         let _magnetLock = false;
 
-        function setTurningPointMagnetData(labels, values, maxPoints) {
+        function setTurningPointMagnetData(labels, values, maxPoints, extraIdxs) {
             const idxs = pickTurningPoints(values, maxPoints);
-            _turningPointIdxs = Array.isArray(idxs) ? idxs.slice().sort((a, b) => a - b) : [];
+            const merged = [];
+            if (Array.isArray(idxs)) merged.push(...idxs);
+            if (Array.isArray(extraIdxs)) merged.push(...extraIdxs);
+            const uniq = Array.from(new Set(merged.filter(v => Number.isFinite(v) && v >= 0)));
+            _turningPointIdxs = uniq.sort((a, b) => a - b);
             _turningPointLabels = Array.isArray(labels) ? labels : [];
         }
 
@@ -3290,7 +3503,7 @@
                 const nearest = findNearestIdx(_turningPointIdxs, curIdx);
                 if (nearest < 0) return;
 
-                const threshold = 2; // 离转折点 2 个点以内触发“磁吸”
+                const threshold = 1; // 降低磁吸力度，避免影响自由移动
                 if (Math.abs(nearest - curIdx) <= threshold && nearest !== curIdx) {
                     _magnetLock = true;
                     try {
@@ -3430,6 +3643,64 @@
             return `${y}-${m}-${dd}`;
         }
 
+        function getBuyMarkersForHistoryChart(fund, labels, values) {
+            const out = { data: [], byDate: {}, idxs: [] };
+            if (!fund || !Array.isArray(labels) || !Array.isArray(values) || labels.length !== values.length) return out;
+            const buys = getFundBuys(fund);
+            if (!buys.length) return out;
+
+            for (const b of buys) {
+                const bp = getFirstHistoryPointOnOrAfter(fund.code, b.date);
+                const effDate = bp?.date;
+                if (!effDate) continue;
+                const idx = labels.indexOf(effDate);
+                if (idx < 0) continue;
+                const nav = Number(values[idx]);
+                if (!Number.isFinite(nav)) continue;
+                if (!out.byDate[effDate]) out.byDate[effDate] = [];
+                out.byDate[effDate].push({ buyDate: b.date, amount: Number(b.amount), effDate, nav });
+                out.idxs.push(idx);
+            }
+
+            for (const [d, items] of Object.entries(out.byDate)) {
+                // 一个生效日只画一个点，但 tooltip 里列出多笔
+                const nav = items?.[0]?.nav;
+                if (!Number.isFinite(nav)) continue;
+                out.data.push({ value: [d, nav], _buyItems: items });
+            }
+
+            out.data.sort((a, b) => (String(a.value?.[0]) < String(b.value?.[0]) ? -1 : 1));
+            out.idxs = Array.from(new Set(out.idxs.filter(v => Number.isFinite(v) && v >= 0))).sort((a, b) => a - b);
+            return out;
+        }
+
+        function getSellMarkersForHistoryChart(fund, labels, values) {
+            const out = { data: [], byDate: {}, idxs: [] };
+            if (!fund || !Array.isArray(labels) || !Array.isArray(values) || labels.length !== values.length) return out;
+            const sells = getFundSells(fund);
+            if (!sells.length) return out;
+            for (const s of sells) {
+                const bp = getFirstHistoryPointOnOrAfter(fund.code, s.date);
+                const effDate = bp?.date;
+                if (!effDate) continue;
+                const idx = labels.indexOf(effDate);
+                if (idx < 0) continue;
+                const nav = Number(values[idx]);
+                if (!Number.isFinite(nav)) continue;
+                if (!out.byDate[effDate]) out.byDate[effDate] = [];
+                out.byDate[effDate].push({ sellDate: s.date, effDate, nav, all: !!s.all, amount: s.amount });
+                out.idxs.push(idx);
+            }
+            for (const [d, items] of Object.entries(out.byDate)) {
+                const nav = items?.[0]?.nav;
+                if (!Number.isFinite(nav)) continue;
+                out.data.push({ value: [d, nav], _sellItems: items });
+            }
+            out.data.sort((a, b) => (String(a.value?.[0]) < String(b.value?.[0]) ? -1 : 1));
+            out.idxs = Array.from(new Set(out.idxs.filter(v => Number.isFinite(v) && v >= 0))).sort((a, b) => a - b);
+            return out;
+        }
+
         // 从缓存数据渲染图表 + 历史表格（不发网络请求）
         function renderHistoryChart(code) {
             const all = historyCache[code];
@@ -3441,13 +3712,51 @@
             const labels = data.map(p => tsToDateStr(p.x));
             const values = data.map(p => p.y);
 
-            setTurningPointMagnetData(labels, values, 18);
+            const fund = funds.find(f => f.code === code);
+            const buyMarkers = getBuyMarkersForHistoryChart(fund, labels, values);
+            const sellMarkers = getSellMarkersForHistoryChart(fund, labels, values);
+
+            setTurningPointMagnetData(labels, values, 18, [...(buyMarkers.idxs || []), ...(sellMarkers.idxs || [])]);
 
             const rangeLabel = { '5d':'1周', '1m':'1月', '3m':'3月', '1y':'1年', 'all':'成立来' };
             document.getElementById('chartTypeLabel').innerHTML = `${rangeLabel[currentTimeRange] || ''}净值走势`;
 
             chart.setOption({
-                tooltip: { axisPointer: { type: 'cross' } },
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'cross' },
+                    formatter: (params) => {
+                        const pLine = Array.isArray(params) ? params.find(p => p.seriesType === 'line') : null;
+                        const date = (pLine?.axisValueLabel || pLine?.axisValue || '').toString();
+                        const nav = (pLine?.data === null || pLine?.data === undefined) ? NaN : Number(pLine.data);
+                        const navText = Number.isFinite(nav) ? nav.toFixed(4) : '--';
+
+                        let html = `${date}<br/>净值：${navText}`;
+                        const items = (buyMarkers.byDate && date) ? buyMarkers.byDate[date] : null;
+                        if (Array.isArray(items) && items.length > 0) {
+                            html += `<br/><span style="font-weight:800;">买入：</span>`;
+                            for (const it of items) {
+                                const amt = Number(it.amount);
+                                const amtText = Number.isFinite(amt) ? amt.toFixed(2) : '--';
+                                html += `<br/>${it.buyDate} ¥${amtText}`;
+                            }
+                        }
+                        const sItems = (sellMarkers.byDate && date) ? sellMarkers.byDate[date] : null;
+                        if (Array.isArray(sItems) && sItems.length > 0) {
+                            html += `<br/><span style="font-weight:800;">卖出：</span>`;
+                            for (const it of sItems) {
+                                if (it.all) {
+                                    html += `<br/>${it.sellDate} 清仓`;
+                                } else {
+                                    const amt = Number(it.amount);
+                                    const amtText = Number.isFinite(amt) ? amt.toFixed(2) : '--';
+                                    html += `<br/>${it.sellDate} ¥${amtText}`;
+                                }
+                            }
+                        }
+                        return html;
+                    }
+                },
                 xAxis: {
                     data: labels,
                     axisTick: { show: true },
@@ -3458,7 +3767,29 @@
                         formatter: null
                     }
                 },
-                series: [{ name: '净值', data: values }]
+                series: [
+                    { name: '净值', data: values },
+                    {
+                        name: '买入',
+                        type: 'scatter',
+                        data: buyMarkers.data,
+                        symbol: 'circle',
+                        symbolSize: 9,
+                        itemStyle: { color: '#ef4444', borderColor: '#ffffff', borderWidth: 2 },
+                        emphasis: { scale: 1.25 },
+                        z: 5
+                    },
+                    {
+                        name: '卖出',
+                        type: 'scatter',
+                        data: sellMarkers.data,
+                        symbol: 'diamond',
+                        symbolSize: 10,
+                        itemStyle: { color: '#10b981', borderColor: '#ffffff', borderWidth: 2 },
+                        emphasis: { scale: 1.25 },
+                        z: 5
+                    }
+                ]
             });
         }
 
@@ -3498,22 +3829,50 @@
                 let dayProfitClass = '';
                 const fund = funds.find(f => f.code === code);
                 if (fund && i > 0) {
+                    // 计算到“上一交易日(all[i-1])”为止的实际持有份额（买入-卖出）
+                    const prevDate = tsToDateStr(all[i - 1].x);
                     const buys = getFundBuys(fund);
+                    const sells = getFundSells(fund);
+                    const txs = [];
+                    for (const b of buys) {
+                        const bp = getFirstHistoryPointOnOrAfter(code, b.date);
+                        const eff = bp?.date;
+                        const nav0 = bp ? Number(bp.y) : NaN;
+                        if (!eff || eff > prevDate || !Number.isFinite(nav0) || nav0 <= 0) continue;
+                        txs.push({ type: 'buy', effDate: eff, amount: Number(b.amount), nav: nav0 });
+                    }
+                    for (const s of sells) {
+                        const bp = getFirstHistoryPointOnOrAfter(code, s.date);
+                        const eff = bp?.date;
+                        const nav0 = bp ? Number(bp.y) : NaN;
+                        if (!eff || eff > prevDate || !Number.isFinite(nav0) || nav0 <= 0) continue;
+                        txs.push({ type: 'sell', effDate: eff, amount: s.amount, all: !!s.all, nav: nav0 });
+                    }
+                    txs.sort((a, b) => (a.effDate < b.effDate ? -1 : (a.effDate > b.effDate ? 1 : (a.type === b.type ? 0 : (a.type === 'buy' ? -1 : 1)))));
+
+                    let invested0 = 0;
                     let sharesPrev = 0;
-                    if (buys.length > 0) {
-                        // 计算到“上一交易日(all[i-1])”为止已生效的份额
-                        const prevDate = tsToDateStr(all[i - 1].x);
-                        for (const b of buys) {
-                            const bp = getFirstHistoryPointOnOrAfter(code, b.date);
-                            const eff = bp?.date;
-                            const nav0 = bp ? Number(bp.y) : NaN;
-                            if (!eff || !Number.isFinite(nav0) || nav0 <= 0) continue;
-                            if (eff <= prevDate) {
-                                const sh = Number(b.amount) / nav0;
-                                if (Number.isFinite(sh) && sh > 0) sharesPrev += sh;
-                            }
+                    for (const tx of txs) {
+                        if (tx.type === 'buy') {
+                            const sh0 = tx.amount / tx.nav;
+                            if (!Number.isFinite(sh0) || sh0 <= 0) continue;
+                            sharesPrev += sh0;
+                            invested0 += tx.amount;
+                        } else {
+                            if (sharesPrev <= 0) continue;
+                            const avgCost = invested0 > 0 ? (invested0 / sharesPrev) : 0;
+                            let sellShares = 0;
+                            if (tx.all) sellShares = sharesPrev;
+                            else sellShares = tx.amount / tx.nav;
+                            if (!Number.isFinite(sellShares) || sellShares <= 0) continue;
+                            sellShares = Math.min(sellShares, sharesPrev);
+                            sharesPrev -= sellShares;
+                            invested0 -= avgCost * sellShares;
+                            if (sharesPrev <= 0.00000001) { sharesPrev = 0; invested0 = 0; }
+                            if (invested0 < 0) invested0 = 0;
                         }
                     }
+
                     if (sharesPrev <= 0) {
                         const legacy = getPositionFromLegacy(fund);
                         if (legacy.has) sharesPrev = Number(legacy.shares) || 0;
