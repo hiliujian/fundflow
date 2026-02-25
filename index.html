@@ -1525,7 +1525,7 @@
         document.getElementById('sourceStatsModal')?.addEventListener('click', (e) => { if (e.target.id === 'sourceStatsModal') closeSourceStats(); });
         function updateSourceIndicator(sourceName) { lastSuccessfulSource = sourceName; const indicator = document.getElementById('currentSourceName'); if (indicator) indicator.textContent = sourceName; }
 
-        window.addEventListener('DOMContentLoaded', () => { console.log('Higher | 9880699@gmail.com'); initChart(); renderFundList(); fetchMarketIndices(); initMobileSwipeNavigation(); if (funds.length > 0) selectFund(funds[0]); startAutoUpdate(); });
+        window.addEventListener('DOMContentLoaded', () => { console.log('Higher | 9880699@gmail.com'); initChart(); renderFundList(); fetchMarketIndices(); initMobileSwipeNavigation(); initProfitToggle(); if (funds.length > 0) selectFund(funds[0]); startAutoUpdate(); });
 
         function renderFundList() {
             const listEl = document.getElementById('fundList');
@@ -2116,6 +2116,25 @@
             return `${m[1]}-${m[2].padStart(2,'0')}-${m[3].padStart(2,'0')}`;
         }
 
+        // 持仓收益显示模式：false=总收益，true=当日盈亏
+        let showDailyProfit = false;
+
+        // 添加持仓收益点击切换事件
+        function initProfitToggle() {
+            const profitCard = document.querySelector('.stat-card:nth-child(4)');
+            if (profitCard) {
+                profitCard.addEventListener('click', function() {
+                    showDailyProfit = !showDailyProfit;
+                    if (selectedFund) {
+                        updateMainDisplay(selectedFund);
+                    }
+                });
+                // 添加点击提示样式
+                profitCard.style.cursor = 'pointer';
+                profitCard.title = '点击切换总收益/当日盈亏';
+            }
+        }
+
         function updateMainDisplay(fund) {
             document.getElementById('selectedFundName').textContent = fund.name || '未知基金';
             document.getElementById('selectedFundCode').textContent = fund.code;
@@ -2168,12 +2187,37 @@
             if (pos.has && Number.isFinite(profitNav)) {
                 const m = calcPositionMetrics(pos, profitNav);
                 if (m.ok) {
-                    document.getElementById('totalProfit').textContent = '¥' + m.profit.toFixed(2);
-                    document.getElementById('totalProfit').className = `stat-value ${m.profit>=0?'positive':'negative'}`;
-                    const ppEl = document.getElementById('profitPercent');
-                    ppEl.textContent = '持仓金额 ¥' + m.value.toFixed(2);
-                    ppEl.className = 'stat-change';
-                    ppEl.style.color = '';
+                    // 计算当日盈亏
+                    const dayGrowth = parseFloat(fund.dayGrowth) || 0;
+                    const dailyProfit = (m.value * dayGrowth) / 100;
+                    
+                    if (showDailyProfit) {
+                        // 显示当日盈亏
+                        document.getElementById('totalProfit').textContent = '¥' + dailyProfit.toFixed(2);
+                        document.getElementById('totalProfit').className = `stat-value ${dailyProfit>=0?'positive':'negative'}`;
+                        const ppEl = document.getElementById('profitPercent');
+                        ppEl.textContent = '持仓金额 ¥' + m.value.toFixed(2);
+                        ppEl.className = 'stat-change';
+                        ppEl.style.color = '';
+                        // 修改标题为当日盈亏
+                        const profitCard = document.querySelector('.stat-card:nth-child(4) .stat-label');
+                        if (profitCard) {
+                            profitCard.textContent = '当日盈亏';
+                        }
+                    } else {
+                        // 显示总收益
+                        document.getElementById('totalProfit').textContent = '¥' + m.profit.toFixed(2);
+                        document.getElementById('totalProfit').className = `stat-value ${m.profit>=0?'positive':'negative'}`;
+                        const ppEl = document.getElementById('profitPercent');
+                        ppEl.textContent = '持仓金额 ¥' + m.value.toFixed(2);
+                        ppEl.className = 'stat-change';
+                        ppEl.style.color = '';
+                        // 修改标题为持仓收益
+                        const profitCard = document.querySelector('.stat-card:nth-child(4) .stat-label');
+                        if (profitCard) {
+                            profitCard.textContent = '持仓收益';
+                        }
+                    }
                 } else {
                     document.getElementById('totalProfit').textContent = '--';
                     document.getElementById('totalProfit').className = 'stat-value';
