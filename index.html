@@ -2196,7 +2196,13 @@
                         document.getElementById('totalProfit').textContent = '¥' + dailyProfit.toFixed(2);
                         document.getElementById('totalProfit').className = `stat-value ${dailyProfit>=0?'positive':'negative'}`;
                         const ppEl = document.getElementById('profitPercent');
-                        ppEl.textContent = '持仓金额 ¥' + m.value.toFixed(2);
+                        const src = (fund && fund._dayGrowthSource) ? String(fund._dayGrowthSource) : '';
+                        const srcTag = (src === 'est')
+                            ? ' <span class="day-growth-source est">估算</span>'
+                            : (src === 'official')
+                                ? ' <span class="day-growth-source official">官方</span>'
+                                : '';
+                        ppEl.innerHTML = '持仓金额 ¥' + m.value.toFixed(2) + srcTag;
                         ppEl.className = 'stat-change';
                         ppEl.style.color = '';
                         // 修改标题为当日盈亏
@@ -2676,6 +2682,7 @@
                 const off = getOfficialDayGrowthFromHistory(fund);
                 if (Number.isFinite(off)) {
                     if (Number.isFinite(off)) fund.dayGrowth = off;
+                    fund._dayGrowthSource = 'official';
                     el.innerHTML = (off >= 0 ? '+' : '') + off.toFixed(2) + '%';
                     el.className = `stat-value ${off >= 0 ? 'positive' : 'negative'}`;
                     if (chgEl) {
@@ -2699,6 +2706,7 @@
                 if (useHoldingsEstimation) {
                     const est = cache.estDayChg;
                     if (Number.isFinite(est)) fund.dayGrowth = est;
+                    fund._dayGrowthSource = 'est';
                     el.innerHTML = (est >= 0 ? '+' : '') + est.toFixed(2) + '%';
                     el.className = `stat-value ${est >= 0 ? 'positive' : 'negative'}`;
                     if (chgEl) {
@@ -2707,6 +2715,7 @@
                 } else {
                     const est = fundgzEst;
                     if (Number.isFinite(est)) fund.dayGrowth = est;
+                    fund._dayGrowthSource = 'est';
                     el.innerHTML = (est >= 0 ? '+' : '') + est.toFixed(2) + '%';
                     el.className = `stat-value ${est >= 0 ? 'positive' : 'negative'}`;
                     if (chgEl) {
@@ -2719,6 +2728,7 @@
                 const dg = getDisplayDayGrowth(fund);
                 // 非交易时也保持 dayGrowth 与展示一致（避免左侧/右侧不同步）
                 if (Number.isFinite(dg)) fund.dayGrowth = dg;
+                fund._dayGrowthSource = Number.isFinite(dg) ? 'official' : '';
                 el.innerHTML = !isNaN(dg) ? (dg >= 0 ? '+' : '') + dg.toFixed(2) + '%' : '--';
                 el.className = `stat-value ${!isNaN(dg) && dg >= 0 ? 'positive' : 'negative'}`;
                 if (chgEl) {
