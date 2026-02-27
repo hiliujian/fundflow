@@ -2680,6 +2680,20 @@
             const fundgzEst = parseFloat((fund._fundgzDayGrowth !== undefined && fund._fundgzDayGrowth !== null) ? fund._fundgzDayGrowth : fund.dayGrowth);
             const hasFundgzToday = (estDateStr === todayStr) && Number.isFinite(fundgzEst);
 
+            // 百度 gushitong 已给出“当日官方日涨跌幅(newest)”：优先展示（比历史净值更快）
+            const baiduNewestDate = (fund && fund._baiduNewestDayGrowthDate) ? String(fund._baiduNewestDayGrowthDate) : '';
+            const baiduNewestChg = Number(fund && fund._baiduNewestDayGrowth);
+            if (baiduNewestDate === todayStr && Number.isFinite(baiduNewestChg)) {
+                fund.dayGrowth = baiduNewestChg;
+                fund._dayGrowthSource = 'official';
+                el.innerHTML = (baiduNewestChg >= 0 ? '+' : '') + baiduNewestChg.toFixed(2) + '%';
+                el.className = `stat-value ${baiduNewestChg >= 0 ? 'positive' : 'negative'}`;
+                if (chgEl) {
+                    chgEl.innerHTML = `当日涨幅 ${todayStr.slice(5)} <span class="day-growth-source official">官方</span>`;
+                }
+                return;
+            }
+
             // 夜间官方净值已更新：强制展示官方口径（并标注日期时间）
             if (navDateStr === todayStr) {
                 const off = getOfficialDayGrowthFromHistory(fund);
@@ -2896,6 +2910,70 @@
             const date = tsToDateStr(x);
             if (!Number.isFinite(y) || y <= 0) return null;
             return { i: all.length - 1, x, y, date };
+        }
+
+        function extractBaiduNewestDayGrowth(json) {
+            // 目标：抓取 gushitong 返回中的 newest:
+            //   [{ text: '日涨幅(02-27)', value: '+2.56%' }, { text: '净值', value: '1.1802' }, ...]
+            // 注意：结构可能很深，因此做递归查找
+            const sh = getShanghaiTimeParts();
+            const year = sh.year;
+
+            function parseNewest(arr) {
+                if (!Array.isArray(arr)) return null;
+                let dateStr = '';
+                let chg = NaN;
+                let nav = NaN;
+                for (const it of arr) {
+                    const text = (it?.text || '').toString();
+                    const value = (it?.value ?? it?.val ?? '').toString();
+                    if (!text || !value) continue;
+                    if ((text.includes('日涨') || text.includes('日跌'))) {
+                        const m = text.match(/\((\d{2})-(\d{2})\)/);
+                        if (m) {
+                            const mm = m[1];
+                            const dd = m[2];
+                            dateStr = `${year}-${mm}-${dd}`;
+                            const v = Number(value.replace('%', '').trim());
+                            if (Number.isFinite(v)) chg = v;
+                        }
+                    } else if (text === '净值') {
+                        const v = Number(value.trim());
+                        if (Number.isFinite(v) && v > 0) nav = v;
+                    }
+                }
+                if (!dateStr && !Number.isFinite(chg) && !Number.isFinite(nav)) return null;
+                return { dateStr, chg, nav };
+            }
+
+            const seen = new Set();
+            function walk(node) {
+                if (!node) return null;
+                if (typeof node !== 'object') return null;
+                if (seen.has(node)) return null;
+                seen.add(node);
+
+                if (Array.isArray(node)) {
+                    for (const x of node) {
+                        const r = walk(x);
+                        if (r) return r;
+                    }
+                    return null;
+                }
+
+                if (Object.prototype.hasOwnProperty.call(node, 'newest')) {
+                    const r0 = parseNewest(node.newest);
+                    if (r0) return r0;
+                }
+
+                for (const k of Object.keys(node)) {
+                    const r = walk(node[k]);
+                    if (r) return r;
+                }
+                return null;
+            }
+
+            return walk(json);
         }
 
         function calcPositionMetricsOfficialT2FromBuys(fund) {
@@ -3232,6 +3310,18 @@
                 try {
                     console.log(`🔄 [持仓-${source.name}] 尝试获取...`);
                     const json = await runWithSourceStat(`holdings_${source.name}`, async () => await source.fetch());
+
+                    // 百度 newest（当日官方日涨跌幅/净值）优先提取，供右侧“日涨跌幅”即时展示
+                    try {
+                        const newest = extractBaiduNewestDayGrowth(json);
+                        if (newest && newest.dateStr) {
+                            if (Number.isFinite(newest.chg)) fund._baiduNewestDayGrowth = newest.chg;
+                            if (Number.isFinite(newest.nav)) fund._baiduNewestNav = newest.nav;
+                            fund._baiduNewestDayGrowthDate = newest.dateStr;
+                        }
+                    } catch {
+                        // ignore
+                    }
 
                     // 深层解析路径
                     const result = json?.Result?.[0];
@@ -3925,6 +4015,57 @@
             appendHistoryTableRows();
         }
 
+        function calcSharesAsOfDate(code, fund, dateStr) {
+            if (!fund || !code || !dateStr) return 0;
+            const buys = getFundBuys(fund);
+            const sells = getFundSells(fund);
+            const txs = [];
+            for (const b of buys) {
+                const bp = getFirstHistoryPointOnOrAfter(code, b.date);
+                const eff = bp?.date;
+                const nav0 = bp ? Number(bp.y) : NaN;
+                if (!eff || eff > dateStr || !Number.isFinite(nav0) || nav0 <= 0) continue;
+                const amt = Number(b.amount);
+                if (!Number.isFinite(amt) || amt <= 0) continue;
+                txs.push({ type: 'buy', effDate: eff, amount: amt, nav: nav0 });
+            }
+            for (const s of sells) {
+                const bp = getFirstHistoryPointOnOrAfter(code, s.date);
+                const eff = bp?.date;
+                const nav0 = bp ? Number(bp.y) : NaN;
+                if (!eff || eff > dateStr || !Number.isFinite(nav0) || nav0 <= 0) continue;
+                const all = !!s.all;
+                const amt = Number(s.amount);
+                if (!all && (!Number.isFinite(amt) || amt <= 0)) continue;
+                txs.push({ type: 'sell', effDate: eff, amount: all ? null : amt, all, nav: nav0 });
+            }
+            txs.sort((a, b) => (a.effDate < b.effDate ? -1 : (a.effDate > b.effDate ? 1 : (a.type === b.type ? 0 : (a.type === 'buy' ? -1 : 1)))));
+
+            let invested0 = 0;
+            let shares0 = 0;
+            for (const tx of txs) {
+                if (tx.type === 'buy') {
+                    const sh0 = tx.amount / tx.nav;
+                    if (!Number.isFinite(sh0) || sh0 <= 0) continue;
+                    shares0 += sh0;
+                    invested0 += tx.amount;
+                } else {
+                    if (shares0 <= 0) continue;
+                    const avgCost = invested0 > 0 ? (invested0 / shares0) : 0;
+                    let sellShares = 0;
+                    if (tx.all) sellShares = shares0;
+                    else sellShares = tx.amount / tx.nav;
+                    if (!Number.isFinite(sellShares) || sellShares <= 0) continue;
+                    sellShares = Math.min(sellShares, shares0);
+                    shares0 -= sellShares;
+                    invested0 -= avgCost * sellShares;
+                    if (shares0 <= 0.00000001) { shares0 = 0; invested0 = 0; }
+                    if (invested0 < 0) invested0 = 0;
+                }
+            }
+            return (Number.isFinite(shares0) && shares0 > 0) ? shares0 : 0;
+        }
+
         function appendHistoryTableRows() {
             const code = historyTableState.code;
             const all = code ? historyCache[code] : null;
@@ -3942,6 +4083,33 @@
             if (start >= end) return;
 
             const rows = [];
+            const fundForCalc = funds.find(f => f.code === code) || ((selectedFund && selectedFund.code === code) ? selectedFund : null);
+            let firstEffBuyDate = '';
+            if (fundForCalc) {
+                const buys0 = getFundBuys(fundForCalc);
+                for (const b of buys0) {
+                    const bp = getFirstHistoryPointOnOrAfter(code, b.date);
+                    if (bp && bp.date) {
+                        if (!firstEffBuyDate || bp.date < firstEffBuyDate) firstEffBuyDate = bp.date;
+                    }
+                }
+            }
+            // 若东财 pingzhongdata 历史净值尚未更新到今日，但百度 gushitong 的 newest 已给出“今日官方日涨跌幅”，
+            // 则在表格顶部插入一行“官方快讯”，避免用户误以为历史净值缺失/逻辑错误。
+            if (historyTableState.rendered === 0) {
+                const fund = funds.find(f => f.code === code);
+                const sh = getShanghaiTimeParts();
+                const todayStr = `${sh.year}-${String(sh.month).padStart(2,'0')}-${String(sh.day).padStart(2,'0')}`;
+                const latestDate = all && all.length > 0 ? tsToDateStr(all[all.length - 1].x) : '';
+                const bnDate = (fund && fund._baiduNewestDayGrowthDate) ? String(fund._baiduNewestDayGrowthDate) : '';
+                const bnChg = Number(fund && fund._baiduNewestDayGrowth);
+                const bnNav = Number(fund && fund._baiduNewestNav);
+                if (bnDate === todayStr && Number.isFinite(bnChg) && latestDate && latestDate < todayStr) {
+                    const pctText = (bnChg >= 0 ? '+' : '') + bnChg.toFixed(2) + '%';
+                    const navText = Number.isFinite(bnNav) && bnNav > 0 ? bnNav.toFixed(4) : '--';
+                    rows.push(`<tr><td>${todayStr}</td><td>${navText}</td><td class="${bnChg>=0?'positive':'negative'}">${pctText}</td><td>--</td></tr>`);
+                }
+            }
             for (let k = start; k < end; k++) {
                 const i = all.length - 1 - k;
                 if (i < 0) break;
@@ -3951,57 +4119,47 @@
 
                 let dayProfitText = '--';
                 let dayProfitClass = '';
-                const fund = funds.find(f => f.code === code);
-                if (fund && i > 0) {
-                    // 计算到“上一交易日(all[i-1])”为止的实际持有份额（买入-卖出）
+                const fund = fundForCalc;
+                if (i > 0) {
                     const prevDate = tsToDateStr(all[i - 1].x);
-                    const buys = getFundBuys(fund);
-                    const sells = getFundSells(fund);
-                    const txs = [];
-                    for (const b of buys) {
-                        const bp = getFirstHistoryPointOnOrAfter(code, b.date);
-                        const eff = bp?.date;
-                        const nav0 = bp ? Number(bp.y) : NaN;
-                        if (!eff || eff > prevDate || !Number.isFinite(nav0) || nav0 <= 0) continue;
-                        txs.push({ type: 'buy', effDate: eff, amount: Number(b.amount), nav: nav0 });
-                    }
-                    for (const s of sells) {
-                        const bp = getFirstHistoryPointOnOrAfter(code, s.date);
-                        const eff = bp?.date;
-                        const nav0 = bp ? Number(bp.y) : NaN;
-                        if (!eff || eff > prevDate || !Number.isFinite(nav0) || nav0 <= 0) continue;
-                        txs.push({ type: 'sell', effDate: eff, amount: s.amount, all: !!s.all, nav: nav0 });
-                    }
-                    txs.sort((a, b) => (a.effDate < b.effDate ? -1 : (a.effDate > b.effDate ? 1 : (a.type === b.type ? 0 : (a.type === 'buy' ? -1 : 1)))));
-
-                    let invested0 = 0;
                     let sharesPrev = 0;
-                    for (const tx of txs) {
-                        if (tx.type === 'buy') {
-                            const sh0 = tx.amount / tx.nav;
-                            if (!Number.isFinite(sh0) || sh0 <= 0) continue;
-                            sharesPrev += sh0;
-                            invested0 += tx.amount;
-                        } else {
-                            if (sharesPrev <= 0) continue;
-                            const avgCost = invested0 > 0 ? (invested0 / sharesPrev) : 0;
-                            let sellShares = 0;
-                            if (tx.all) sellShares = sharesPrev;
-                            else sellShares = tx.amount / tx.nav;
-                            if (!Number.isFinite(sellShares) || sellShares <= 0) continue;
-                            sellShares = Math.min(sellShares, sharesPrev);
-                            sharesPrev -= sellShares;
-                            invested0 -= avgCost * sellShares;
-                            if (sharesPrev <= 0.00000001) { sharesPrev = 0; invested0 = 0; }
-                            if (invested0 < 0) invested0 = 0;
+                    const canCalc = !!fund && (!firstEffBuyDate || prevDate >= firstEffBuyDate);
+                    if (canCalc) {
+                        sharesPrev = calcSharesAsOfDate(code, fund, prevDate);
+
+                        // 兜底1：若无卖出记录，直接用买入份额求和（避免因边界导致 calcSharesAsOfDate 算出 NaN/0）
+                        if (!(Number.isFinite(sharesPrev) && sharesPrev > 0)) {
+                            const buys0 = getFundBuys(fund);
+                            const sells0 = getFundSells(fund);
+                            if (Array.isArray(buys0) && buys0.length > 0 && (!Array.isArray(sells0) || sells0.length === 0)) {
+                                let shSum = 0;
+                                for (const b of buys0) {
+                                    const bp = getFirstHistoryPointOnOrAfter(code, b.date);
+                                    const eff = bp?.date;
+                                    const nav0 = bp ? Number(bp.y) : NaN;
+                                    const amt = Number(b.amount);
+                                    if (!eff || eff > prevDate || !Number.isFinite(nav0) || nav0 <= 0 || !Number.isFinite(amt) || amt <= 0) continue;
+                                    shSum += amt / nav0;
+                                }
+                                if (Number.isFinite(shSum) && shSum > 0) sharesPrev = shSum;
+                            }
+                        }
+
+                        // 兜底2：旧结构 shares
+                        if (!(Number.isFinite(sharesPrev) && sharesPrev > 0)) {
+                            const legacy = getPositionFromLegacy(fund);
+                            if (legacy.has) sharesPrev = Number(legacy.shares) || 0;
+                        }
+
+                        // 兜底3：当前持仓 shares（仅用于展示兜底）
+                        if (!(Number.isFinite(sharesPrev) && sharesPrev > 0)) {
+                            const posNow = getPosition(fund);
+                            if (posNow && posNow.has) sharesPrev = Number(posNow.shares) || 0;
                         }
                     }
 
-                    if (sharesPrev <= 0) {
-                        const legacy = getPositionFromLegacy(fund);
-                        if (legacy.has) sharesPrev = Number(legacy.shares) || 0;
-                    }
-                    if (Number.isFinite(sharesPrev) && sharesPrev > 0) {
+                    if (!Number.isFinite(sharesPrev) || sharesPrev < 0) sharesPrev = 0;
+                    if (sharesPrev > 0) {
                         const dayProfit = (all[i].y - all[i - 1].y) * sharesPrev;
                         dayProfitText = '¥' + dayProfit.toFixed(2);
                         dayProfitClass = dayProfit >= 0 ? 'positive' : 'negative';
