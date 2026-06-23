@@ -295,6 +295,32 @@
         .overview-empty-icon { font-size: 4rem; margin-bottom: 16px; opacity: 0.5; }
         .overview-empty-text { font-size: 1.125rem; font-weight: 600; margin-bottom: 8px; color: var(--gray-700); }
         .overview-empty-subtext { font-size: 0.9375rem; }
+
+        /* 布局切换按钮 */
+        .layout-toggle-group { display: flex; gap: 4px; background: var(--gray-100); padding: 4px; border-radius: 12px; border: 1.5px solid var(--gray-200); }
+        .layout-toggle-btn { width: 36px; height: 36px; border: none; border-radius: 8px; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; color: var(--gray-500); font-size: 1rem; }
+        .layout-toggle-btn:hover { background: rgba(255,255,255,0.7); color: var(--gray-700); }
+        .layout-toggle-btn.active { background: white; color: var(--primary); box-shadow: 0 2px 8px rgba(0,0,0,0.10); }
+
+        /* 卡片网格模式 */
+        .overview-grid-mode { display: grid; gap: 16px; grid-template-columns: repeat(4, 1fr); }
+        @media (max-width: 1919px) { .overview-grid-mode { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 1439px) { .overview-grid-mode { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 1023px) { .overview-grid-mode { grid-template-columns: 1fr; } }
+
+        /* 卡片模式下 overview-card 垂直堆叠 */
+        .overview-grid-mode .overview-card { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; padding: 18px 20px; }
+        .overview-grid-mode .overview-card::before { width: 100%; height: 4px; top: 0; left: 0; bottom: auto; right: 0; transform: scaleX(0); transform-origin: left; transition: transform 0.3s; }
+        .overview-grid-mode .overview-card:hover { transform: translateY(-4px); }
+        .overview-grid-mode .overview-card:hover::before { transform: scaleX(1); }
+        .overview-grid-mode .overview-card-info { width: 100%; }
+        .overview-grid-mode .overview-card-name { font-size: 1rem; }
+        .overview-grid-mode .overview-card-metrics-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+        .overview-grid-mode .overview-card-metric { align-items: flex-start; min-width: 0; width: 100%; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 10px; padding: 10px 12px; }
+        .overview-grid-mode .overview-card-time { align-items: flex-start; min-width: 0; width: 100%; }
+        .overview-grid-mode .overview-card-footer { display: flex; justify-content: space-between; align-items: center; width: 100%; }
+        .overview-grid-mode .overview-card-actions { justify-self: auto; }
+        .overview-grid-mode .overview-card-break { display: none; }
         
         /* 快捷键提示 */
         .keyboard-hint { position: fixed; bottom: 20px; right: 20px; background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); padding: 12px 16px; border-radius: 12px; border: 1px solid var(--gray-200); box-shadow: 0 4px 12px rgba(0,0,0,0.1); z-index: 100; font-size: 0.8125rem; color: var(--gray-600); display: flex; flex-direction: column; gap: 6px; opacity: 0; transform: translateY(10px); transition: opacity 0.5s ease, transform 0.5s ease; pointer-events: none; }
@@ -865,6 +891,14 @@
                         <p class="overview-subtitle">点击任意卡片查看详情</p>
                     </div>
                     <div class="overview-header-right">
+                        <div class="layout-toggle-group" title="切换布局">
+                            <button class="layout-toggle-btn active" id="layoutListBtn" onclick="setOverviewLayout('list')" title="列表模式">
+                                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="3" width="14" height="3" rx="1.5" fill="currentColor"/><rect x="2" y="7.5" width="14" height="3" rx="1.5" fill="currentColor" opacity="0.5"/><rect x="2" y="12" width="14" height="3" rx="1.5" fill="currentColor" opacity="0.3"/></svg>
+                            </button>
+                            <button class="layout-toggle-btn" id="layoutGridBtn" onclick="setOverviewLayout('grid')" title="卡片模式">
+                                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2" y="2" width="6" height="6" rx="1.5" fill="currentColor"/><rect x="10" y="2" width="6" height="6" rx="1.5" fill="currentColor" opacity="0.5"/><rect x="2" y="10" width="6" height="6" rx="1.5" fill="currentColor" opacity="0.5"/><rect x="10" y="10" width="6" height="6" rx="1.5" fill="currentColor" opacity="0.3"/></svg>
+                            </button>
+                        </div>
                         <button class="overview-refresh-btn" id="overviewRefreshBtn" onclick="refreshAllFunds()" title="刷新所有基金数据">
                             <span class="refresh-icon">🔄</span>
                             <span class="refresh-text">刷新</span>
@@ -6130,6 +6164,85 @@
             }
         }
 
+        // 布局切换：'list' | 'grid'
+        let _overviewLayout = (function() {
+            try { return localStorage.getItem('overviewLayout') || 'list'; } catch(e) { return 'list'; }
+        })();
+
+        function setOverviewLayout(mode) {
+            _overviewLayout = (mode === 'grid') ? 'grid' : 'list';
+            try { localStorage.setItem('overviewLayout', _overviewLayout); } catch(e) {}
+            applyOverviewLayout();
+        }
+
+        function applyOverviewLayout() {
+            const listBtn = document.getElementById('layoutListBtn');
+            const gridBtn = document.getElementById('layoutGridBtn');
+            const container = document.getElementById('overviewGrid');
+            if (!container) return;
+
+            if (_overviewLayout === 'grid') {
+                container.classList.remove('overview-list');
+                container.classList.add('overview-grid-mode');
+                if (listBtn) listBtn.classList.remove('active');
+                if (gridBtn) gridBtn.classList.add('active');
+                // 重组卡片内部结构为卡片模式
+                _applyGridCardStructure(container);
+            } else {
+                container.classList.remove('overview-grid-mode');
+                container.classList.add('overview-list');
+                if (listBtn) listBtn.classList.add('active');
+                if (gridBtn) gridBtn.classList.remove('active');
+                // 恢复列表模式结构
+                _applyListCardStructure(container);
+            }
+        }
+
+        function _applyGridCardStructure(container) {
+            container.querySelectorAll('.overview-card').forEach(card => {
+                if (card.dataset.gridDone === '1') return;
+                const info = card.querySelector('.overview-card-info');
+                const metrics = Array.from(card.querySelectorAll(':scope > .overview-card-metric'));
+                const time = card.querySelector('.overview-card-time');
+                const actions = card.querySelector('.overview-card-actions');
+                // 将 metrics 包到网格行
+                const metricsRow = document.createElement('div');
+                metricsRow.className = 'overview-card-metrics-row';
+                metrics.forEach(m => metricsRow.appendChild(m));
+                // footer: time + actions
+                const footer = document.createElement('div');
+                footer.className = 'overview-card-footer';
+                if (time) footer.appendChild(time);
+                if (actions) footer.appendChild(actions);
+                // 清空并重建
+                card.innerHTML = '';
+                if (info) card.appendChild(info);
+                card.appendChild(metricsRow);
+                card.appendChild(footer);
+                card.dataset.gridDone = '1';
+            });
+        }
+
+        function _applyListCardStructure(container) {
+            container.querySelectorAll('.overview-card').forEach(card => {
+                if (card.dataset.gridDone !== '1') return;
+                const info = card.querySelector('.overview-card-info');
+                const metrics = Array.from(card.querySelectorAll('.overview-card-metric'));
+                const footer = card.querySelector('.overview-card-footer');
+                const time = footer ? footer.querySelector('.overview-card-time') : null;
+                const actions = footer ? footer.querySelector('.overview-card-actions') : null;
+                card.innerHTML = '';
+                if (info) card.appendChild(info);
+                metrics.forEach(m => card.appendChild(m));
+                if (time) card.appendChild(time);
+                if (actions) card.appendChild(actions);
+                const brk = document.createElement('div');
+                brk.className = 'overview-card-break';
+                card.appendChild(brk);
+                card.dataset.gridDone = '0';
+            });
+        }
+
         // 渲染基金概览视图
         function renderFundOverview() {
             const list = document.getElementById('overviewGrid');
@@ -6332,6 +6445,9 @@
             // 一次性替换DOM
             list.innerHTML = '';
             list.appendChild(fragment);
+
+            // 应用当前布局模式
+            applyOverviewLayout();
             
             // 使用事件委托
             list.removeEventListener('click', handleOverviewClick);
