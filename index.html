@@ -315,8 +315,10 @@
         .overview-grid-mode .overview-card:hover::before { transform: scaleX(1); }
         .overview-grid-mode .overview-card-info { width: 100%; }
         .overview-grid-mode .overview-card-name { font-size: 1rem; }
-        .overview-grid-mode .overview-card-metrics-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
-        .overview-grid-mode .overview-card-metric { align-items: flex-start; min-width: 0; width: 100%; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 10px; padding: 10px 12px; }
+        .overview-grid-mode .overview-card-metric-label { font-size: 0.625rem; }
+        .overview-grid-mode .overview-card-metric-value { font-size: 0.9375rem; }
+        .overview-grid-mode .overview-card-metrics-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; width: 100%; }
+        .overview-grid-mode .overview-card-metric { align-items: flex-start; min-width: 0; width: 100%; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 10px; padding: 8px 10px; }
         .overview-grid-mode .overview-card-time { align-items: flex-start; min-width: 0; width: 100%; }
         .overview-grid-mode .overview-card-footer { display: flex; justify-content: space-between; align-items: center; width: 100%; }
         .overview-grid-mode .overview-card-actions { justify-self: auto; }
@@ -608,21 +610,29 @@
             .overview-header { margin-bottom: 16px; }
             .summary-metrics { grid-template-columns: 1fr; }
         
-            .overview-header-right { flex-direction: column; align-items: stretch; gap: 12px; }
+            .overview-header-right { flex-direction: row; align-items: center; gap: 8px; flex-shrink: 0; }
             .overview-refresh-btn { padding: 8px 10px; font-size: 0.8125rem; gap: 6px; border-radius: 12px; }
+            .layout-toggle-group { padding: 3px; border-radius: 10px; }
+            .layout-toggle-btn { width: 30px; height: 30px; border-radius: 7px; font-size: 0.875rem; }
         
             .overview-list { gap: 12px; }
             .overview-card { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 10px; padding: 12px; }
             .overview-card-info { order: 1; flex: 1 1 auto; min-width: 0; }
-            .overview-card-actions { order: 2; flex: 0 0 auto; }
+            .overview-card-actions { order: 2; flex: 0 0 auto; justify-content: flex-end; }
             .overview-card-break { display: block; order: 3; flex: 0 0 100%; height: 0; }
-            .overview-card-metric { order: 4; flex: 1 1 calc(33.333% - 7px); min-width: 0; }
-            .overview-card-time { order: 5; flex: 1 1 calc(33.333% - 7px); min-width: 0; }
+            .overview-card-metric { order: 4; flex: 1 1 calc(33.333% - 7px); min-width: 0; align-items: flex-start; }
+            .overview-card-time { order: 5; flex: 1 1 calc(33.333% - 7px); min-width: 0; align-items: flex-start; }
             .overview-card-name { font-size: 1rem; margin-bottom: 4px; }
             .overview-card-metric-label, .overview-card-time-label { font-size: 0.625rem; margin-bottom: 3px; }
             .overview-card-metric-value { font-size: 1rem; }
-            .overview-card-metric, .overview-card-time { align-items: flex-start; min-width: auto; }
-            .overview-card-actions { justify-content: flex-end; }
+
+            /* 卡片模式：覆盖上方列表模式的 order/flex，恢复纵向堆叠 */
+            .overview-grid-mode .overview-card { display: flex; flex-direction: column; flex-wrap: nowrap; gap: 12px; padding: 16px; }
+            .overview-grid-mode .overview-card-info { order: unset; flex: unset; width: 100%; }
+            .overview-grid-mode .overview-card-actions { order: unset; flex: unset; }
+            .overview-grid-mode .overview-card-break { display: none; }
+            .overview-grid-mode .overview-card-metric { order: unset; flex: unset; }
+            .overview-grid-mode .overview-card-time { order: unset; flex: unset; }
             .fund-title-main { font-size: 1.25rem; }
             .stats-grid { grid-template-columns: 1fr; gap: 12px; }
             .stat-card { padding: 16px; }
@@ -669,6 +679,7 @@
             .overview-refresh-btn { width: 36px; height: 36px; padding: 0; border-radius: 12px; gap: 0; }
             .overview-refresh-btn .refresh-text { display: none; }
             .overview-card-metric, .overview-card-time { flex: 1 1 calc(50% - 5px); }
+            .overview-grid-mode .overview-card-metric, .overview-grid-mode .overview-card-time { flex: unset; }
         }
     </style>
 </head>
